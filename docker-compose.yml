@@ -1,0 +1,32 @@
+services:
+
+  frontend:
+    build: ./frontend/mood-task-boost
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./frontend/mood-task-boost:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: always
+
+  backend:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - database
+    restart: always
+
+  database:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: projeto
+    ports:
+      - "5432:5432"
+    restart: always
