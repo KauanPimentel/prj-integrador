@@ -18,36 +18,41 @@ import Help from "@/pages/Help";
 import NotFound from "@/pages/NotFound";
 import UserImport from "./pages/UserImport";
 import OrgStructure from "./pages/OrgStructure";
+import { getCurrentUser } from "@/data/mock";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/kanban" element={<Kanban />} />
-            <Route path="/rewards" element={<Rewards />} />
-            <Route path="/ranking" element={<Ranking />} />
-            <Route path="/mood" element={<Mood />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/institution" element={<Institution />} />
-            <Route path="/help" element={<Help />} />
-            <Route path="/userimport" element={<UserImport />} />
-            <Route path="/orgstructure" element={<OrgStructure />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+
+const App = () => {
+  const currentUser = getCurrentUser();
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              {currentUser.role !== "funcionario" && <Route path="/kanban" element={<Kanban />} />}
+              <Route path="/rewards" element={<Rewards />} />
+              <Route path="/ranking" element={<Ranking />} />
+              <Route path="/mood" element={<Mood />} />
+              <Route path="/profile" element={<Profile />} />
+              {currentUser.role !== "funcionario" && <Route path="/institution" element={<Institution />} />}
+              <Route path="/help" element={<Help />} />
+              {currentUser.role !== "funcionario" && <Route path="/userimport" element={<UserImport />} />}
+              <Route path="/orgstructure" element={<OrgStructure />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

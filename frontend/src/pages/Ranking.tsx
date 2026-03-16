@@ -1,9 +1,7 @@
 import { motion } from "framer-motion";
 import { Trophy, Star, Medal, TrendingUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { teamMembers } from "@/data/mock";
-
-const sorted = [...teamMembers].sort((a, b) => b.points - a.points);
+import { getActiveUsers } from "@/data/mock";
 
 const podiumColors = [
   "from-[hsl(43,100%,65%)] to-[hsl(43,100%,65%)]",
@@ -12,6 +10,8 @@ const podiumColors = [
 ];
 
 export default function Ranking() {
+  const sorted = [...getActiveUsers()].filter((u) => u.nivel !== 3).sort((a, b) => b.points - a.points);
+
   return (
     <div className="p-6 lg:p-8 space-y-8">
       <div>
@@ -77,7 +77,7 @@ export default function Ranking() {
               </div>
               <div className="flex-1">
                 <p className="font-medium text-foreground">{member.name}</p>
-                <p className="text-xs text-muted-foreground">{member.role === "manager" ? "Gestor" : "Membro"}</p>
+                <p className="text-xs text-muted-foreground">{member.role === "gestor" ? "Gestor" : member.role === "admin" ? "Admin" : "Membro"}</p>
               </div>
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-primary" />

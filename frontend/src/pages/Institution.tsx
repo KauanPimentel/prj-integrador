@@ -3,12 +3,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Building2, Users, Mail, UserMinus, UserPlus } from "lucide-react";
-import { teamMembers } from "@/data/mock";
+import { getActiveUsers, getCurrentUser } from "@/data/mock";
 import { toast } from "sonner";
 import { useState } from "react";
 
 export default function Institution() {
   const [inviteEmail, setInviteEmail] = useState("");
+  const currentUser = getCurrentUser();
+  if (currentUser.role === "funcionario") {
+    return (
+      <div className="p-6 lg:p-8">
+        <h1 className="text-2xl font-bold">Acesso restrito</h1>
+        <p className="mt-2 text-muted-foreground">Você não tem permissão para visualizar esta página.</p>
+      </div>
+    );
+  }
+  const membrosVisiveis = getActiveUsers().filter((m) => m.nivel !== 3);
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +33,6 @@ export default function Institution() {
         <Building2 className="w-8 h-8 text-primary" />
         Instituição
       </h1>
-
       {/* Institution Info */}
       <Card>
         <CardHeader>
@@ -35,12 +44,10 @@ export default function Institution() {
               <Label>Nome da Instituição</Label>
               <Input defaultValue="TechCorp LTDA" />
             </div>
-            
           </div>
           <Button className="bg-gradient-primary text-primary-foreground">Salvar</Button>
         </CardContent>
       </Card>
-
       {/* Invite Members */}
       <Card>
         <CardHeader>
@@ -59,18 +66,17 @@ export default function Institution() {
           </form>
         </CardContent>
       </Card>
-
       {/* Members List */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" />
-            Membros ({teamMembers.length})
+            Membros ({getActiveUsers().length})
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {teamMembers.map((member) => (
+            {membrosVisiveis.map((member) => (
               <div key={member.id} className="flex items-center gap-4 p-3 rounded-lg bg-secondary/50">
                 <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
                   <span className="text-primary-foreground font-semibold text-sm">{member.name.charAt(0)}</span>
@@ -80,10 +86,15 @@ export default function Institution() {
                   <p className="text-xs text-muted-foreground truncate">{member.email}</p>
                 </div>
                 <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
-                  {member.role === "manager" ? "Gestor" : "Membro"}
+                  {member.role === "gestor" ? "Gestor" : member.role === "admin" ? "Admin" : "Membro"}
                 </span>
-                {member.role !== "manager" && (
-                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => toast.info(`${member.name} removido`)}>
+                {currentUser.nivel >= 2 && member.nivel < 3 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => toast.info(`${member.name} removido`)}
+                  >
                     <UserMinus className="w-4 h-4" />
                   </Button>
                 )}

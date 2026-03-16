@@ -31,12 +31,12 @@ export default function Profile() {
               </span>
             </div>
             <h2 className="font-heading font-bold text-xl text-foreground">{currentUser.name}</h2>
-            <p className="text-sm text-muted-foreground mb-4">{currentUser.role === "manager" ? "Gestor" : "Membro"}</p>
+            <p className="text-sm text-muted-foreground mb-4">{currentUser.role === "gestor" ? "Gestor" : currentUser.role === "admin" ? "Admin" : "Membro"}</p>
             <div className="flex items-center justify-center gap-4">
               <div className="text-center">
                 <div className="flex items-center justify-center gap-1">
                   <Star className="w-4 h-4 text-warning" />
-                  <span className="font-heading font-bold text-foreground">{isExampleUser ? currentUser.points : 0}</span>
+                  <span className="font-heading font-bold text-foreground">{(currentUser.points ?? 0).toLocaleString()}</span>
                 </div>
                 <span className="text-xs text-muted-foreground">Pontos</span>
               </div>

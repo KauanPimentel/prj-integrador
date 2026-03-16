@@ -21,26 +21,33 @@ import { ThemeToggle } from "./ThemeToggle";
 import { useTheme } from "@/hooks/use-theme";
 import logoLight from "@/assets/logo-azis.svg";
 import logoDark from "@/assets/logo-azis-branco.svg";
+import { getCurrentUser } from "@/data/mock";
 
 
-const navItems = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/kanban", icon: KanbanSquare, label: "Kanban" },
-  { to: "/rewards", icon: Gift, label: "Recompensas" },
-  { to: "/ranking", icon: Trophy, label: "Ranking" },
-  { to: "/mood", icon: Smile, label: "Humor" },
-  { to: "/institution", icon: Building2, label: "Instituição" },
-  { to: "/profile", icon: User, label: "Perfil" },
-  { to: "/help", icon: HelpCircle, label: "Ajuda" },
-  { to: "/userimport", icon: Upload, label: "Importar Usuários" },
-  { to: "/orgstructure", icon: Network, label: "Estrutura Organizacional" },
-];
+
+function getNavItemsByRole(role) {
+  const items = [
+    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/kanban", icon: KanbanSquare, label: "Kanban", hideFor: "funcionario" },
+    { to: "/rewards", icon: Gift, label: "Recompensas" },
+    { to: "/ranking", icon: Trophy, label: "Ranking" },
+    { to: "/mood", icon: Smile, label: "Humor" },
+    { to: "/institution", icon: Building2, label: "Instituição", hideFor: "funcionario" },
+    { to: "/profile", icon: User, label: "Perfil" },
+    { to: "/help", icon: HelpCircle, label: "Ajuda" },
+    { to: "/userimport", icon: Upload, label: "Importar Usuários", hideFor: "funcionario" },
+    { to: "/orgstructure", icon: Network, label: "Estrutura Organizacional" },
+  ];
+  return items.filter((item) => item.hideFor !== role);
+}
 
 export function AppSidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const isDark = useTheme();
 
+  const currentUser = getCurrentUser();
+  const navItems = getNavItemsByRole(currentUser?.role ?? "funcionario");
   return (
     <aside
       className={cn(

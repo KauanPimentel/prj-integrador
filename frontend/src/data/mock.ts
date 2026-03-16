@@ -10,11 +10,12 @@ export interface User {
   name: string;
   email: string;
   avatar: string;
-  role: "manager" | "member";
+  role: "admin" | "gestor" | "funcionario";
+  nivel: 1 | 2 | 3;
   points: number;
   institution_id: string;
   position?: string;
-  managerId?: string | null;
+  gestorId?: string | null;
 }
 
 export interface Task {
@@ -47,66 +48,84 @@ export const users: User[] = [
     name: "Ana Silva",
     email: "ana@azis.com",
     avatar: "",
-    role: "manager",
+    role: "gestor",
+    nivel: 2,
     points: 1250,
     institution_id: "1",
     position: "CEO",
-    managerId: null,
+    gestorId: null,
   },
   {
     id: "2",
     name: "Carlos Santos",
     email: "carlos@azis.com",
     avatar: "",
-    role: "member",
+    role: "funcionario",
+    nivel: 1,
     points: 980,
     institution_id: "1",
     position: "Frontend Developer",
-    managerId: "1",
+    gestorId: "1",
   },
   {
     id: "3",
     name: "Maria Oliveira",
     email: "maria@azis.com",
     avatar: "",
-    role: "member",
+    role: "funcionario",
+    nivel: 1,
     points: 1100,
     institution_id: "1",
     position: "Backend Developer",
-    managerId: "1",
+    gestorId: "1",
   },
   {
     id: "4",
     name: "Pedro Costa",
     email: "pedro@azis.com",
     avatar: "",
-    role: "member",
+    role: "funcionario",
+    nivel: 1,
     points: 750,
     institution_id: "1",
     position: "QA Engineer",
-    managerId: "3",
+    gestorId: "3",
   },
   {
     id: "5",
     name: "Julia Lima",
     email: "julia@azis.com",
     avatar: "",
-    role: "member",
+    role: "funcionario",
+    nivel: 1,
     points: 890,
     institution_id: "1",
     position: "UX Designer",
-    managerId: "2",
+    gestorId: "2",
   },
   {
     id: "6",
     name: "Rafael Souza",
     email: "rafael@azis.com",
     avatar: "",
-    role: "member",
+    role: "funcionario",
+    nivel: 1,
     points: 1350,
     institution_id: "1",
     position: "DevOps Engineer",
-    managerId: "1",
+    gestorId: "1",
+  },
+  {
+    id: "0",
+    name: "Azis Admin",
+    email: "admin@azis.dev",
+    avatar: "",
+    role: "admin",
+    nivel: 3,
+    points: 0,
+    institution_id: "1",
+    position: "Administrador",
+    gestorId: null,
   },
 ];
 
@@ -114,27 +133,147 @@ export const users: User[] = [
 export const teamMembers = users;
 
 // =====================
+// PERSISTED DATA SUPPORT
+// =====================
+
+const USERS_STORAGE_KEY = "azis_users";
+
+export function getActiveUsers(): User[] {
+  try {
+    const stored = localStorage.getItem(USERS_STORAGE_KEY);
+    const storedUser = localStorage.getItem("azis_user");
+    const currentUserId = storedUser ? (JSON.parse(storedUser) as any)?.id : null;
+
+    if (stored) {
+      const parsed = JSON.parse(stored) as any[];
+      if (Array.isArray(parsed)) {
+        // Normalize older data shapes that used `gestor_id` instead of `gestorId`
+        const normalized = parsed.map((u) => ({
+          ...u,
+          gestorId: u.gestorId ?? u.gestor_id ?? null,
+        })) as User[];
+
+        // If stored users are missing gestorId, merge from the default mock dataset
+        const defaultById = new Map(users.map((u) => [u.id, u]));
+        const normalizedWithManagers = normalized.map((u) => {
+          if (u.gestorId === null || u.gestorId === undefined) {
+            const fallback = defaultById.get(u.id) ?? users.find((m) => m.email === u.email);
+            return {
+              ...u,
+              gestorId: fallback?.gestorId ?? null,
+            };
+          }
+          return u;
+        });
+
+        // If the current user is a manager in the default data set but the stored list
+        // does not include their subordinates, fallback to the default mock set.
+        const currentUserHasSubordinatesInMock = users.some(
+          (u) => u.gestorId?.toString() === currentUserId?.toString(),
+        );
+        const currentUserHasSubordinatesInStorage = normalizedWithManagers.some(
+          (u) => u.gestorId?.toString() === currentUserId?.toString(),
+        );
+
+        if (currentUserId && currentUserHasSubordinatesInMock && !currentUserHasSubordinatesInStorage) {
+          return users;
+        }
+
+        // If local storage only contains the current user, also fallback to default set.
+        if (
+          currentUserId &&
+          normalizedWithManagers.length <= 1 &&
+          normalizedWithManagers.some((u) => u.id?.toString() === currentUserId.toString())
+        ) {
+          return users;
+        }
+
+        // Normalize IDs to strings so comparisons always work even if backend returns numbers
+        const normalizedWithStrings = normalizedWithManagers.map((u) => ({
+          ...u,
+          id: u.id?.toString(),
+          gestorId: u.gestorId != null ? u.gestorId.toString() : null,
+        }));
+
+        return normalizedWithStrings;
+      }
+    }
+  } catch (error) {
+    console.error("getActiveUsers parse error:", error);
+  }
+
+  // Ensure default mock data uses string IDs as well
+  return users.map((u) => ({
+    ...u,
+    id: u.id.toString(),
+    gestorId: u.gestorId != null ? u.gestorId.toString() : null,
+  }));
+}
+
+export function saveActiveUsers(activeUsers: User[]) {
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(activeUsers));
+  } catch (error) {
+    console.error("saveActiveUsers error:", error);
+  }
+}
+
+export function resetActiveUsers() {
+  localStorage.removeItem(USERS_STORAGE_KEY);
+}
+
+// =====================
 // USER FUNCTIONS
 // =====================
 
 export function getUserById(id: string): User | undefined {
-  return users.find((u) => u.id === id);
+  const currentUsers = getActiveUsers();
+  return currentUsers.find((u) => u.id === id);
 }
 
-export function getManagerName(managerId?: string | null): string {
-  if (!managerId) return "Sem gestor";
+export function getManagerName(gestorId?: string | null): string {
+  if (!gestorId) return "Sem gestor";
 
-  const manager = users.find((u) => u.id === managerId);
+  const currentUsers = getActiveUsers();
+  const manager = currentUsers.find((u) => u.id === gestorId);
   return manager ? manager.name : "Gestor não encontrado";
 }
 
 export function getCurrentUser(): User {
   try {
     const stored = localStorage.getItem("azis_user");
-    if (stored) return JSON.parse(stored);
-  } catch {}
+    if (stored) {
+      const parsed = JSON.parse(stored) as any;
+      const current = {
+        ...users[0],
+        ...parsed,
+        id: parsed.id != null ? parsed.id.toString() : users[0].id.toString(),
+        name: parsed.name ?? users[0].name,
+        email: parsed.email ?? users[0].email,
+        avatar: parsed.avatar ?? users[0].avatar,
+        role: parsed.role ?? users[0].role,
+        institution_id: parsed.institution_id ?? users[0].institution_id,
+        position: parsed.position ?? users[0].position,
+        gestorId:
+          parsed.gestorId != null
+            ? parsed.gestorId.toString()
+            : parsed.gestor_id != null
+            ? parsed.gestor_id.toString()
+            : users[0].gestorId?.toString() ?? null,
+        points: typeof parsed.points === "number" ? parsed.points : users[0].points,
+      };
 
-  return users[0];
+      return current;
+    }
+  } catch (error) {
+    console.error("getCurrentUser parse error:", error);
+  }
+
+  return {
+    ...users[0],
+    id: users[0].id.toString(),
+    gestorId: users[0].gestorId?.toString() ?? null,
+  };
 }
 
 // =====================
