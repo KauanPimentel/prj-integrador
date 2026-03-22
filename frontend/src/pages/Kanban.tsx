@@ -1,16 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Calendar, Star, User } from "lucide-react";
+import { Plus, Calendar, Star, User, MoreVertical, Eye, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { getActiveUsers, getCurrentUser, Task, TaskStatus } from "@/data/mock";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDroppable } from "@dnd-kit/core";
 import TaskFormModal from "@/components/TaskFormModal";
+import EvidenceModal from "@/components/EvidenceModal";
+import ReviewModal from "@/components/ReviewModal";
 import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
@@ -18,9 +26,11 @@ const columns: { id: TaskStatus; title: string; color: string }[] = [
   { id: "todo", title: "A Fazer", color: "bg-info" },
   { id: "in_progress", title: "Em Progresso", color: "bg-warning" },
   { id: "done", title: "Concluído", color: "bg-primary" },
+  { id: "approved", title: "Aprovado", color: "bg-success" },
+  { id: "rejected", title: "Reprovado", color: "bg-destructive" },
 ];
 
-function TaskCard({ task, isDragging }: { task: Task; isDragging?: boolean }) {
+function TaskCard({ task, isDragging, onReviewClick, onDelete }: { task: Task; isDragging?: boolean; onReviewClick?: (task: Task) => void; onDelete?: (task: Task) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: task.id });
 
   const style = {
@@ -29,11 +39,58 @@ function TaskCard({ task, isDragging }: { task: Task; isDragging?: boolean }) {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const currentUser = getCurrentUser();
+  const canReview = currentUser.nivel >= 2 && task.status === "done";
+  const canMarkDone = currentUser.nivel === 1 && task.assignee.id === currentUser.id && task.status === "in_progress";
+  const canDelete = (currentUser.role === "gestor" || currentUser.role === "admin") && (task.status === "approved" || task.status === "rejected");
+
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Card className="p-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow border border-border bg-card">
-        <h4 className="font-medium text-sm text-foreground mb-2">{task.title}</h4>
+      <Card className="p-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow border border-border bg-card relative">
+        <div className="flex items-start justify-between mb-2">
+          <h4 className="font-medium text-sm text-foreground flex-1 pr-8">{task.title}</h4>
+          {(canReview || canMarkDone || canDelete) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 absolute top-2 right-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreVertical className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canMarkDone && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onReviewClick?.(task); }}>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Marcar como Concluída
+                  </DropdownMenuItem>
+                )}
+                {canReview && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onReviewClick?.(task); }}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    Revisar Tarefa
+                  </DropdownMenuItem>
+                )}
+                {canDelete && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete?.(task); }}>
+                    <XCircle className="w-4 h-4 mr-2" />
+                    {task.status === "approved" ? "Excluir (será removida em 7s)" : "Excluir"}
+                    {task.isDeleting ? ` (${task.deleteCountdown ?? 7}s)` : ""}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{task.description}</p>
+        {task.isDeleting && (
+          <div className="mb-2 text-xs font-medium text-amber-400">
+            Excluindo tarefa em {task.deleteCountdown ?? 7} segundos...
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
@@ -57,7 +114,7 @@ function TaskCard({ task, isDragging }: { task: Task; isDragging?: boolean }) {
   );
 }
 
-function DroppableColumn({ column, tasks }: { column: typeof columns[0]; tasks: Task[] }) {
+function DroppableColumn({ column, tasks, onReviewClick, onDelete }: { column: typeof columns[0]; tasks: Task[]; onReviewClick?: (task: Task) => void; onDelete?: (task: Task) => void }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
   return (
@@ -74,7 +131,7 @@ function DroppableColumn({ column, tasks }: { column: typeof columns[0]; tasks: 
           <AnimatePresence>
             {tasks.map((task) => (
               <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
-                <TaskCard task={task} />
+                <TaskCard task={task} onReviewClick={onReviewClick} onDelete={onDelete} />
               </motion.div>
             ))}
           </AnimatePresence>
@@ -90,19 +147,20 @@ export default function Kanban() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const activeUsers = getActiveUsers();
   const currentUser = getCurrentUser();
-  if (currentUser.role === "funcionario") {
-    return (
-      <div className="p-6 lg:p-8">
-        <h1 className="text-2xl font-bold">Acesso restrito</h1>
-        <p className="mt-2 text-muted-foreground">Você não tem permissão para visualizar esta página.</p>
-      </div>
-    );
-  }
+
+  // Filter tasks based on role
+  const filteredTasks = currentUser.role === "funcionario" 
+    ? tasks.filter(task => task.assignee.id === currentUser.id)
+    : tasks;
 
   const mapApiTaskToTask = (task: any): Task => ({
     id: task.id?.toString() ?? "",
@@ -122,6 +180,7 @@ export default function Kanban() {
       institution_id: "",
       position: "",
       gestorId: null,
+      avatar: ""
     },
   });
 
@@ -179,15 +238,18 @@ export default function Kanban() {
     }
   };
 
-  const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
+  const updateTaskStatus = async (taskId: string, status: TaskStatus, evidence?: string) => {
     try {
+      const body: any = { status };
+      if (evidence) body.evidence = evidence;
+
       const response = await fetch(getApiUrl(`/api/tasks/${taskId}/status`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(body),
       });
 
       const responseData = await response.json();
@@ -196,11 +258,170 @@ export default function Kanban() {
       }
 
       setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: responseData.task.status } : t)),
+        prev.map((t) => (t.id === taskId ? { ...t, status: responseData.task.status, evidence: responseData.task.evidence } : t)),
       );
+
+      // Mostra toast diferenciado para anexação de tarefa
+      if (status === 'done') {
+        toast({
+          title: "Tarefa Enviada",
+          description: responseData.message,
+        });
+      }
     } catch (err: any) {
       console.error("updateTaskStatus error:", err);
       toast({ title: "Erro", description: err?.message ?? "Falha ao atualizar status" });
+      throw err;
+    }
+  };
+
+  const handleTaskAction = (task: Task) => {
+    const currentUser = getCurrentUser();
+    if (currentUser.nivel === 1 && task.status === "in_progress") {
+      // Funcionário marcando como concluída
+      setSelectedTask(task);
+      setEvidenceModalOpen(true);
+    } else if (currentUser.nivel >= 2 && task.status === "done") {
+      // Gestor revisando tarefa
+      setSelectedTask(task);
+      setReviewModalOpen(true);
+    }
+  };
+
+  const handleEvidenceSubmit = async (evidence: string) => {
+    if (!selectedTask) return;
+
+    setActionLoading(true);
+    try {
+      await updateTaskStatus(selectedTask.id, "done", evidence);
+      setEvidenceModalOpen(false);
+      setSelectedTask(null);
+      toast({ title: "Sucesso", description: "Tarefa enviada para revisão!" });
+    } catch (error) {
+      console.error("Error submitting evidence:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReview = async (action: "approve" | "reject", feedback?: string) => {
+    if (!selectedTask) return;
+
+    setActionLoading(true);
+    try {
+      const response = await fetch(getApiUrl(`/api/tasks/${selectedTask.id}/review`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ action, feedback }),
+      });
+
+      const responseData = await response.json();
+      if (!response.ok) {
+        throw new Error(responseData.error ?? "Erro ao revisar tarefa");
+      }
+
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === selectedTask.id
+            ? { ...t, status: action === "approve" ? "approved" : "rejected" }
+            : t
+        )
+      );
+
+      // Atualiza pontos do usuário local conforme backend retornou
+      if (responseData?.updatedPoints != null && selectedTask?.assignee?.id === currentUser.id) {
+        const stored = localStorage.getItem("azis_user");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          localStorage.setItem(
+            "azis_user",
+            JSON.stringify({ ...parsed, points: responseData.updatedPoints })
+          );
+        }
+      }
+
+      setReviewModalOpen(false);
+      setSelectedTask(null);
+      toast({
+        title: action === "approve" ? "✅ Tarefa Aprovada" : "❌ Tarefa Reprovada",
+        description: action === "approve"
+          ? `${responseData.pointsCredited} ponto(s) creditado(s) ao funcionário!`
+          : "Nenhum ponto foi atribuído ao funcionário.",
+      });
+    } catch (err: any) {
+      console.error("reviewTask error:", err);
+      toast({ title: "Erro", description: err?.message ?? "Falha ao revisar tarefa" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const deletionIntervalsRef = useRef<Record<string, number>>({});
+
+  const handleDeleteTask = async (task: Task) => {
+    if (!(currentUser.role === "gestor" || currentUser.role === "admin")) return;
+    if (!["approved", "rejected"].includes(task.status)) return;
+
+    try {
+      const response = await fetch(getApiUrl(`/api/tasks/${task.id}`), {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+      });
+
+      const responseData = await response.json();
+      if (!response.ok) {
+        throw new Error(responseData.error ?? "Erro ao excluir tarefa");
+      }
+
+      if (task.status === "approved") {
+        toast({ title: "Exclusão agendada", description: "Tarefa aprovada será removida em 7 segundos." });
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isDeleting: true, deleteCountdown: 7 } : t)));
+
+        let countdown = 7;
+        const intervalId = window.setInterval(() => {
+          countdown -= 1;
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === task.id
+                ? {
+                    ...t,
+                    deleteCountdown: countdown > 0 ? countdown : 0,
+                  }
+                : t,
+            ),
+          );
+
+          if (countdown <= 0) {
+            window.clearInterval(intervalId);
+          }
+        }, 1000);
+
+        deletionIntervalsRef.current[task.id] = intervalId;
+
+        window.setTimeout(() => {
+          setTasks((prev) => prev.filter((t) => t.id !== task.id));
+          window.clearInterval(intervalId);
+          delete deletionIntervalsRef.current[task.id];
+        }, 7000);
+      } else {
+        // rejected manual delete
+        setTasks((prev) => prev.filter((t) => t.id !== task.id));
+        toast({ title: "Tarefa excluída", description: "Tarefa reprovada excluída com sucesso." });
+      }
+    } catch (error: any) {
+      console.error("deleteTask error:", error);
+      toast({ title: "Erro", description: error?.message ?? "Falha ao excluir tarefa" });
+
+      // rollback visual deletion state
+      if (task.status === "approved") {
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isDeleting: false, deleteCountdown: undefined } : t)));
+      }
     }
   };
 
@@ -221,22 +442,41 @@ export default function Kanban() {
     // Check if dropped on a column
     const targetColumn = columns.find((c) => c.id === overId);
     if (targetColumn) {
-      if (activeTask.status !== targetColumn.id) {
+      const targetStatus = targetColumn.id;
+
+      // Permitido via drag somente transições de workflow de funcionário
+      const allowedDrag = ['todo', 'in_progress', 'done'];
+
+      if (!allowedDrag.includes(targetStatus)) {
+        const currentUser = getCurrentUser();
+        const description = currentUser.role === 'funcionario'
+          ? 'Aprovação/reprovação só pode ser feita pelo superior'
+          : 'Aprovação/reprovação deve ser feita via botão de revisão';
+
+        toast({
+          title: 'Atenção',
+          description,
+        });
+        return;
+      }
+
+      if (activeTask.status !== targetStatus) {
         setTasks((prev) =>
-          prev.map((t) => (t.id === active.id ? { ...t, status: targetColumn.id } : t)),
+          prev.map((t) => (t.id === active.id ? { ...t, status: targetStatus } : t)),
         );
-        updateTaskStatus(active.id as string, targetColumn.id);
+        updateTaskStatus(active.id as string, targetStatus);
       }
       return;
     }
 
-    // Dropped on another task — move to that task's column
+    // if usuario soltar em cima de outra task, não faz alteração de status (apenas em colunas)
     const targetTask = tasks.find((t) => t.id === overId);
-    if (targetTask && activeTask.status !== targetTask.status) {
-      setTasks((prev) =>
-        prev.map((t) => (t.id === active.id ? { ...t, status: targetTask.status } : t)),
-      );
-      updateTaskStatus(active.id as string, targetTask.status);
+    if (targetTask) {
+      toast({
+        title: 'Atenção',
+        description: 'Arraste para a coluna, não sobre outra tarefa',
+      });
+      return;
     }
   };
 
@@ -246,6 +486,14 @@ export default function Kanban() {
     loadTasks();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      Object.values(deletionIntervalsRef.current).forEach((intervalId) => {
+        window.clearInterval(intervalId);
+      });
+    };
+  }, []);
+
   return (
     <div className="p-6 lg:p-8">
       <div className="flex items-center justify-between mb-8">
@@ -253,21 +501,29 @@ export default function Kanban() {
           <h1 className="text-3xl font-heading font-bold text-foreground">Quadro Kanban</h1>
           <p className="text-muted-foreground mt-1">Arraste tarefas entre as colunas</p>
         </div>
-        <TaskFormModal
-          trigger={
-            <Button className="bg-gradient-primary text-primary-foreground">
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Tarefa
-            </Button>
-          }
-          onSubmit={handleCreateTask}
-        />
+        {currentUser.role !== "funcionario" && (
+          <TaskFormModal
+            trigger={
+              <Button className="bg-gradient-primary text-primary-foreground">
+                <Plus className="w-4 h-4 mr-2" />
+                Nova Tarefa
+              </Button>
+            }
+            onSubmit={handleCreateTask}
+          />
+        )}
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex gap-6 overflow-x-auto pb-4">
           {columns.map((col) => (
-            <DroppableColumn key={col.id} column={col} tasks={tasks.filter((t) => t.status === col.id)} />
+            <DroppableColumn
+              key={col.id}
+              column={col}
+              tasks={filteredTasks.filter((t) => t.status === col.id)}
+              onReviewClick={handleTaskAction}
+              onDelete={handleDeleteTask}
+            />
           ))}
         </div>
         <DragOverlay>
@@ -278,6 +534,21 @@ export default function Kanban() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      <EvidenceModal
+        open={evidenceModalOpen}
+        onOpenChange={setEvidenceModalOpen}
+        onSubmit={handleEvidenceSubmit}
+        loading={actionLoading}
+      />
+
+      <ReviewModal
+        open={reviewModalOpen}
+        onOpenChange={setReviewModalOpen}
+        task={selectedTask}
+        onReview={handleReview}
+        loading={actionLoading}
+      />
     </div>
   );
 }

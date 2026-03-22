@@ -28,7 +28,7 @@ import { getCurrentUser } from "@/data/mock";
 function getNavItemsByRole(role) {
   const items = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/kanban", icon: KanbanSquare, label: "Kanban", hideFor: "funcionario" },
+    { to: "/kanban", icon: KanbanSquare, label: "Kanban" },
     { to: "/rewards", icon: Gift, label: "Recompensas" },
     { to: "/ranking", icon: Trophy, label: "Ranking" },
     { to: "/mood", icon: Smile, label: "Humor" },
@@ -36,7 +36,7 @@ function getNavItemsByRole(role) {
     { to: "/profile", icon: User, label: "Perfil" },
     { to: "/help", icon: HelpCircle, label: "Ajuda" },
     { to: "/userimport", icon: Upload, label: "Importar Usuários", hideFor: "funcionario" },
-    { to: "/orgstructure", icon: Network, label: "Estrutura Organizacional" },
+    { to: "/orgstructure", icon: Network, label: "Estrutura Organizacional", hideFor: "funcionario" },
   ];
   return items.filter((item) => item.hideFor !== role);
 }

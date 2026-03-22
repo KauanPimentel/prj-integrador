@@ -41,6 +41,10 @@ async function initDB() {
       assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       gestor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      evidence TEXT,
+      reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMP,
+      credited BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
@@ -49,6 +53,72 @@ async function initDB() {
   // Garantir colunas necessárias caso tabela tasks já exista (migração incremental)
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS title VARCHAR(255) NOT NULL")
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS description TEXT")
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS evidence TEXT")
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reviewed_by INTEGER")
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP")
+  await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS credited BOOLEAN NOT NULL DEFAULT FALSE")
+
+  // Recompensas, resgates e pontos de usuário (conforme contexto solicitado)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_points (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      total_points INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id)
+    );
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rewards (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255),
+      title VARCHAR(255),
+      description TEXT,
+      points_cost INTEGER NOT NULL CHECK (points_cost > 0),
+      cost INTEGER NOT NULL DEFAULT 0,
+      quantity INTEGER NOT NULL DEFAULT 0,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS redemptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reward_id INTEGER NOT NULL REFERENCES rewards(id),
+      points_spent INTEGER NOT NULL,
+      redeemed_at TIMESTAMP DEFAULT NOW()
+    );
+  `)
+
+  // Garantir colunas de rewards em caso de tabela existente (compatibilidade retroativa)
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS name VARCHAR(255)")
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS title VARCHAR(255)")
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS description TEXT")
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS points_cost INTEGER")
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS quantity INTEGER")
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS active BOOLEAN")
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS created_by INTEGER")
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS created_at TIMESTAMP")
+  await pool.query("ALTER TABLE rewards ADD COLUMN IF NOT EXISTS cost INTEGER NOT NULL DEFAULT 0")
+
+  // Sincronizar valor legacy name/title para evitar exceções de NOT NULL no pipeline
+  await pool.query("UPDATE rewards SET name = title WHERE name IS NULL AND title IS NOT NULL")
+  await pool.query("UPDATE rewards SET title = name WHERE title IS NULL AND name IS NOT NULL")
+  await pool.query("UPDATE rewards SET cost = points_cost WHERE cost IS NULL OR cost = 0")
+
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS reward_id INTEGER")
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS user_id INTEGER")
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS points_spent INTEGER")
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS cost INTEGER NOT NULL")
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS voucher_code VARCHAR(100) NOT NULL")
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending'")
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS redeemed_at TIMESTAMP DEFAULT NOW()")
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()")
+  await pool.query("ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()")
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'todo'")
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 10")
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deadline DATE")
@@ -116,6 +186,14 @@ async function initDB() {
         await pool.query('UPDATE users SET gestor_id = $1 WHERE id = $2', [manager.rows[0].id, userId])
       }
     }
+
+    // Inicializar ou sincronizar user_points
+    await pool.query(
+      `INSERT INTO user_points (user_id, total_points, updated_at) 
+       VALUES ($1, $2, NOW()) 
+       ON CONFLICT (user_id) DO UPDATE SET total_points = $2, updated_at = NOW()`,
+      [userId, user.points]
+    )
   }
 }
 

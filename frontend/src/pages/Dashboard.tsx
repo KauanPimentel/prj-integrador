@@ -1,36 +1,71 @@
 import { motion } from "framer-motion";
 import { KanbanSquare, Trophy, Smile, Star, TrendingUp, Users, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCurrentUser, getActiveUsers, mockTasks, weeklyMoodData, monthlyProductivity } from "@/data/mock";
+import { getCurrentUser, getActiveUsers, weeklyMoodData, monthlyProductivity } from "@/data/mock";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
+import { useState, useEffect } from "react";
+import { getApiUrl, getAuthHeaders } from "@/lib/api";
 
 export default function Dashboard() {
   const currentUser = getCurrentUser();
   console.log("[Dashboard] currentUser:", currentUser);
 
-  const activeUsers = getActiveUsers();
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [tasksResponse, usersResponse] = await Promise.all([
+        fetch(getApiUrl("/api/tasks"), { headers: getAuthHeaders() }),
+        fetch(getApiUrl("/api/users"), { headers: getAuthHeaders() }),
+      ]);
+
+      if (tasksResponse.ok) {
+        const tasksData = await tasksResponse.json();
+        setTasks(tasksData.tasks || []);
+      }
+
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        setUsers(usersData || []);
+      }
+    } catch (error) {
+      console.error("Error loading dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const activeUsers = users.length > 0 ? users : getActiveUsers();
   const visibleTeamUsers = activeUsers.filter((u) => u.nivel !== 3);
   const isExampleUser = currentUser.email === "ana@azis.com";
   const userPoints = Number(currentUser.points ?? 0);
   const userName = currentUser.name?.split(" ")[0] ?? "Usuário";
 
+  const completedTasks = tasks.filter((t) => t.status === "approved" || t.status === "done").length;
+  const myTasks = currentUser.nivel === 1
+    ? tasks.filter((t) => t.assignee_id === currentUser.id)
+    : tasks.filter((t) => t.gestor_id === currentUser.id);
+
   const stats = [
-    { label: "Tarefas Concluídas", value: isExampleUser ? "23" : "0", icon: CheckCircle2, color: "text-primary" },
-    { label: "Pontos Totais", value: (isExampleUser ? userPoints : 0).toLocaleString(), icon: Star, color: "text-warning" },
+    { label: "Tarefas Concluídas", value: completedTasks.toString(), icon: CheckCircle2, color: "text-primary" },
+    { label: "Pontos Totais", value: userPoints.toLocaleString(), icon: Star, color: "text-warning" },
     {
       label: "Ranking",
-      value: isExampleUser
-        ? `#${Math.max(1, visibleTeamUsers.findIndex((u) => u.id === currentUser.id) + 1)}`
+      value: visibleTeamUsers.length > 0
+        ? `#${Math.max(1, [...visibleTeamUsers].sort((a, b) => b.points - a.points).findIndex((u) => u.id === currentUser.id) + 1)}`
         : "#—",
       icon: Trophy,
       color: "text-accent",
     },
     { label: "Humor Hoje", value: isExampleUser ? "😊" : "—", icon: Smile, color: "text-mood-good" },
   ];
-
-  const myTasks = isExampleUser
-    ? mockTasks.filter((t) => t.assignee.id === currentUser.id || currentUser.nivel >= 2)
-    : [];
 
   return (
     <div className="p-6 lg:p-8 space-y-8">

@@ -37,7 +37,7 @@ const App = () => {
             <Route path="/register" element={<Register />} />
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              {currentUser.role !== "funcionario" && <Route path="/kanban" element={<Kanban />} />}
+              <Route path="/kanban" element={<Kanban />} />
               <Route path="/rewards" element={<Rewards />} />
               <Route path="/ranking" element={<Ranking />} />
               <Route path="/mood" element={<Mood />} />
@@ -45,7 +45,7 @@ const App = () => {
               {currentUser.role !== "funcionario" && <Route path="/institution" element={<Institution />} />}
               <Route path="/help" element={<Help />} />
               {currentUser.role !== "funcionario" && <Route path="/userimport" element={<UserImport />} />}
-              <Route path="/orgstructure" element={<OrgStructure />} />
+              {currentUser.role !== "funcionario" && <Route path="/orgstructure" element={<OrgStructure />} />}
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

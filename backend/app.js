@@ -4,6 +4,7 @@ const authRoutes = require('./routes/authRoutes')
 const userRoutes = require('./routes/userRoutes')
 const importRoutes = require('./routes/importRoutes')
 const taskRoutes = require('./routes/taskRoutes')
+const rewardRoutes = require('./routes/rewardRoutes')
 
 const app = express()
 
@@ -14,6 +15,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/users/import', importRoutes)
 app.use('/api/tasks', taskRoutes)
+app.use('/api/rewards', rewardRoutes)
 
 app.get('/api/hello', (req, res) => {
   res.json({ message: 'API funcionando 🚀' })

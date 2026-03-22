@@ -74,6 +74,15 @@ export default function OrgStructure() {
   const [users, setUsers] = useState<User[]>(getActiveUsers());
   const visibleUsers = [...users].sort(sortUsers);
 
+  // Filter users based on role
+  const getVisibleUsersForUser = (user: User, allUsers: User[]): User[] => {
+    if (user.role === "admin") return allUsers;
+    if (user.role === "gestor") return allUsers; // Gestores podem ver toda a hierarquia, mas não editar
+    return [user]; // funcionario sees only themselves, but since route is blocked, not used
+  };
+
+  const filteredUsers = getVisibleUsersForUser(currentUser, visibleUsers);
+
   // Fetch users from backend to ensure IDs match the database
   useEffect(() => {
     const apiUrl = getApiUrl("/api/users");
@@ -97,8 +106,8 @@ export default function OrgStructure() {
       .finally(() => setLoading(false));
   }, []);
 
-  const rootUsers = visibleUsers.filter((u) => u.gestorId === null).sort(sortUsers)
-  const selectedUser = selectedId ? visibleUsers.find((u) => u.id === selectedId) ?? null : null;
+  const rootUsers = filteredUsers.filter((u) => u.gestorId === null).sort(sortUsers)
+  const selectedUser = selectedId ? filteredUsers.find((u) => u.id === selectedId) ?? null : null;
 
   if (loading) {
     return (
@@ -108,7 +117,7 @@ export default function OrgStructure() {
     );
   }
 
- const validManagers = visibleUsers
+ const validManagers = filteredUsers
   .filter((u) => u.id !== selectedId && u.nivel >= 2)
   .sort(sortUsers);
 
@@ -116,7 +125,7 @@ export default function OrgStructure() {
     if (!selectedUser) return;
 
     // Não permitir mudanças sem permissão
-    if (currentUser.nivel < 2) {
+    if (currentUser.nivel < 3) {
       toast({
         title: "Acesso negado",
         description: "Você não tem permissão para alterar a hierarquia.",
@@ -235,7 +244,7 @@ export default function OrgStructure() {
                   level={0}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
-                  allUsers={visibleUsers}
+                  allUsers={filteredUsers}
                 />
               ))}
             </div>
@@ -281,7 +290,7 @@ export default function OrgStructure() {
                   Assign Manager
                 </label>
 
-                <Select value={newGestorId} onValueChange={setNewGestorId}>
+                <Select value={newGestorId} onValueChange={setNewGestorId} disabled={currentUser.nivel < 3}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a manager" />
                   </SelectTrigger>
@@ -298,11 +307,11 @@ export default function OrgStructure() {
                 <Button
                   className="w-full"
                   onClick={handleSave}
-                  disabled={!newGestorId}
+                  disabled={currentUser.nivel < 3 || !newGestorId}
                 >
                   Save Changes
                 </Button>
-                {currentUser.nivel >= 2 && selectedUser && selectedUser.nivel !== 3 && (
+                {currentUser.nivel >= 3 && selectedUser && selectedUser.nivel !== 3 && (
                   <Button
                     variant="destructive"
                     className="w-full"

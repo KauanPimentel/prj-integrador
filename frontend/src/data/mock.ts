@@ -2,7 +2,7 @@
 // TYPES
 // =====================
 
-export type TaskStatus = "todo" | "in_progress" | "done";
+export type TaskStatus = "todo" | "in_progress" | "done" | "approved" | "rejected";
 export type MoodType = "very_happy" | "happy" | "neutral" | "sad" | "stressed";
 
 export interface User {
@@ -27,6 +27,8 @@ export interface Task {
   points: number;
   deadline: string;
   created_at: string;
+  isDeleting?: boolean;
+  deleteCountdown?: number;
 }
 
 export interface Reward {
@@ -50,70 +52,10 @@ export const users: User[] = [
     avatar: "",
     role: "gestor",
     nivel: 2,
-    points: 1250,
+    points: 0,
     institution_id: "1",
     position: "CEO",
     gestorId: null,
-  },
-  {
-    id: "2",
-    name: "Carlos Santos",
-    email: "carlos@azis.com",
-    avatar: "",
-    role: "funcionario",
-    nivel: 1,
-    points: 980,
-    institution_id: "1",
-    position: "Frontend Developer",
-    gestorId: "1",
-  },
-  {
-    id: "3",
-    name: "Maria Oliveira",
-    email: "maria@azis.com",
-    avatar: "",
-    role: "funcionario",
-    nivel: 1,
-    points: 1100,
-    institution_id: "1",
-    position: "Backend Developer",
-    gestorId: "1",
-  },
-  {
-    id: "4",
-    name: "Pedro Costa",
-    email: "pedro@azis.com",
-    avatar: "",
-    role: "funcionario",
-    nivel: 1,
-    points: 750,
-    institution_id: "1",
-    position: "QA Engineer",
-    gestorId: "3",
-  },
-  {
-    id: "5",
-    name: "Julia Lima",
-    email: "julia@azis.com",
-    avatar: "",
-    role: "funcionario",
-    nivel: 1,
-    points: 890,
-    institution_id: "1",
-    position: "UX Designer",
-    gestorId: "2",
-  },
-  {
-    id: "6",
-    name: "Rafael Souza",
-    email: "rafael@azis.com",
-    avatar: "",
-    role: "funcionario",
-    nivel: 1,
-    points: 1350,
-    institution_id: "1",
-    position: "DevOps Engineer",
-    gestorId: "1",
   },
   {
     id: "0",
@@ -258,8 +200,8 @@ export function getCurrentUser(): User {
           parsed.gestorId != null
             ? parsed.gestorId.toString()
             : parsed.gestor_id != null
-            ? parsed.gestor_id.toString()
-            : users[0].gestorId?.toString() ?? null,
+              ? parsed.gestor_id.toString()
+              : users[0].gestorId?.toString() ?? null,
         points: typeof parsed.points === "number" ? parsed.points : users[0].points,
       };
 
@@ -285,7 +227,7 @@ export const mockTasks: Task[] = [
     id: "t1",
     title: "Redesign da landing page",
     description: "Atualizar o design da página inicial",
-    assignee: users[1],
+    assignee: users[0], // Ana Silva
     status: "todo",
     points: 50,
     deadline: "2026-03-15",
@@ -295,7 +237,7 @@ export const mockTasks: Task[] = [
     id: "t2",
     title: "Implementar API de pagamentos",
     description: "Integrar gateway de pagamento",
-    assignee: users[2],
+    assignee: users[0], // Ana Silva
     status: "in_progress",
     points: 80,
     deadline: "2026-03-20",
@@ -305,7 +247,7 @@ export const mockTasks: Task[] = [
     id: "t3",
     title: "Testes de integração",
     description: "Criar testes automatizados",
-    assignee: users[3],
+    assignee: users[1], // Azis Admin
     status: "done",
     points: 40,
     deadline: "2026-03-12",
