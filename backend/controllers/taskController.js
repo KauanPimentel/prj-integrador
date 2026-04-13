@@ -7,6 +7,10 @@ async function createTask(req, res) {
   try {
     const { title, description, points = 10, deadline, assignee_id } = req.body
 
+    if (req.user?.role !== 'gestor') {
+      return res.status(403).json({ error: 'Apenas gestores podem criar tarefas' })
+    }
+
     if (!title) {
       return res.status(400).json({ error: 'Título é obrigatório' })
     }
@@ -14,12 +18,12 @@ async function createTask(req, res) {
       return res.status(400).json({ error: 'Responsável é obrigatório' })
     }
 
-    // Validar assignee (pode ser o próprio gestor ou um subordinado)
+    // Validar assignee (deve ser subordinado direto do gestor)
     const assigneeResult = await pool.query('SELECT id, gestor_id FROM users WHERE id = $1', [assignee_id])
     const assignee = assigneeResult.rows[0]
 
-    if (!assignee || (assignee.id !== req.user.id && assignee.gestor_id !== req.user.id)) {
-      return res.status(403).json({ error: 'Você só pode atribuir tarefas a si mesmo ou aos seus subordinados' })
+    if (!assignee || assignee.gestor_id !== req.user.id) {
+      return res.status(403).json({ error: 'Você só pode atribuir tarefas a subordinados diretos' })
     }
 
     const insertResult = await pool.query(

@@ -63,6 +63,23 @@ export default function UserImport() {
           text = sanitizeCsvContent(text);
           const result = Papa.parse(text, { skipEmptyLines: true });
           data = result.data as any[][];
+
+          // Fallback for CSV malformado como uma linha inteira entre aspas
+          // Ex: "name,email,..." em vez de name,email,...
+          if (
+            data.length > 0 &&
+            data[0].length === 1 &&
+            typeof data[0][0] === 'string' &&
+            data[0][0].includes(',')
+          ) {
+            data = (data as any[]).map((row) => {
+              const rowText = String(row[0]).trim()
+              const unquoted = rowText.startsWith('"') && rowText.endsWith('"')
+                ? rowText.slice(1, -1).replace(/""/g, '"')
+                : rowText
+              return unquoted.split(',').map((col) => col.trim())
+            })
+          }
         }
 
         if (data.length < 2) {

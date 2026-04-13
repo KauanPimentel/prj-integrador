@@ -174,6 +174,7 @@ async function getLeaderboard(limit = 10) {
     `SELECT u.id AS user_id, u.name, COALESCE(up.total_points, 0) AS total_points
       FROM users u
       LEFT JOIN user_points up ON u.id = up.user_id
+      WHERE u.nivel < 3
       ORDER BY total_points DESC
       LIMIT $1`,
     [limit]

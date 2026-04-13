@@ -50,7 +50,6 @@ const testUsersWithSanitizationIssues = [
     password: '123456',
     role: 'Gestor',
     position: 'Onipresente',
-    points: 1213,
     managerEmail: 'linguine@azis.com;;;;;;;;; ', // Extra semicolons and space
     __row: 2,
   },
@@ -60,7 +59,6 @@ const testUsersWithSanitizationIssues = [
     password: '123456',
     role: 'Funcionario',
     position: 'Fudido',
-    points: 1213,
     managerEmail: 'linguine@azis.com;;;;;;; ', // Extra semicolons and space
     __row: 3,
   },
@@ -70,7 +68,6 @@ const testUsersWithSanitizationIssues = [
     password: '123456',
     role: 'Funcionario',
     position: 'Fudida',
-    points: 1213,
     managerEmail: 'kaua@azis.com;;;;;;', // Extra semicolons
     __row: 4,
   },
@@ -123,7 +120,7 @@ async function runTests() {
     // Test: Validate that all 3 users were created
     console.log('4️⃣  Validating user creation...')
     const usersResult = await pool.query(
-      'SELECT id, name, email, role, position, points, gestor_id FROM users WHERE email = ANY($1) ORDER BY email',
+      'SELECT id, name, email, role, position, gestor_id FROM users WHERE email = ANY($1) ORDER BY email',
       [testUsersWithSanitizationIssues.map(u => u.email)]
     )
 
@@ -139,7 +136,7 @@ async function runTests() {
 
     // Linguine should not have a manager (or self-assigned)
     const linguine = userByEmail.get('linguine@azis.com')
-    console.log(`   ✓ Linguine created: name="${linguine.name}", points=${linguine.points}`)
+    console.log(`   ✓ Linguine created: name="${linguine.name}"`)
 
     // Kaua should have Linguine as manager despite sanitization issues
     const kaua = userByEmail.get('kaua@azis.com')

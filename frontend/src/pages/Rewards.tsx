@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/data/mock";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { getApiUrl, getAuthHeaders } from "@/lib/api";
+import chestVideo from "@/assets/treasure-chest.mp4";
 
 interface Reward {
   id: string;
@@ -62,6 +63,7 @@ export default function Rewards() {
   const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [loading, setLoading] = useState(true);
   const [redeeming, setRedeeming] = useState<string | null>(null);
+  const [showChest, setShowChest] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newReward, setNewReward] = useState({ title: "", description: "", points_cost: 0, quantity: 0 });
@@ -164,6 +166,7 @@ export default function Rewards() {
         await loadRewards();
         await loadRedemptions();
 
+        setShowChest(true);
         toast.success(`🎉 "${reward.name || reward.title}" resgatado com sucesso!`);
       } else {
         toast.error(data.message || "Erro ao resgatar recompensa");
@@ -625,6 +628,62 @@ export default function Rewards() {
           )}
         </TabsContent>
       </Tabs>
+
+      {showChest && (
+        <>
+          <style>{`
+            @keyframes chestFadeIn {
+              from { opacity: 0; transform: scale(0.8); }
+              to { opacity: 1; transform: scale(1); }
+            }
+          `}</style>
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              zIndex: 9999,
+              animation: 'chestFadeIn 0.3s ease-out',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              background: 'rgba(0, 0, 0, 0.45)'
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                width: '500px',
+                maxWidth: '90vw',
+                backgroundColor: '#000000',
+                borderRadius: '1rem',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden'
+              }}
+            >
+              <video
+                src={chestVideo}
+                autoPlay
+                muted
+                onEnded={() => setTimeout(() => setShowChest(false), 500)}
+                style={{
+                  width: '100%',
+                  height: 'auto',
+                  display: 'block'
+                }}
+              />
+            </div>
+            </div>
+        </>
+      )}
     </div>
   );
 }

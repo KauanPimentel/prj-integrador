@@ -52,7 +52,7 @@ export const users: User[] = [
     avatar: "",
     role: "gestor",
     nivel: 2,
-    points: 0,
+    points: undefined,
     institution_id: "1",
     position: "CEO",
     gestorId: null,
@@ -64,7 +64,7 @@ export const users: User[] = [
     avatar: "",
     role: "admin",
     nivel: 3,
-    points: 0,
+    points: undefined,
     institution_id: "1",
     position: "Administrador",
     gestorId: null,
@@ -202,7 +202,7 @@ export function getCurrentUser(): User {
             : parsed.gestor_id != null
               ? parsed.gestor_id.toString()
               : users[0].gestorId?.toString() ?? null,
-        points: typeof parsed.points === "number" ? parsed.points : users[0].points,
+        points: typeof parsed.points === "number" ? parsed.points : undefined,
       };
 
       return current;
@@ -229,7 +229,7 @@ export const mockTasks: Task[] = [
     description: "Atualizar o design da página inicial",
     assignee: users[0], // Ana Silva
     status: "todo",
-    points: 50,
+    points: 0,
     deadline: "2026-03-15",
     created_at: "2026-03-01",
   },
@@ -239,7 +239,7 @@ export const mockTasks: Task[] = [
     description: "Integrar gateway de pagamento",
     assignee: users[0], // Ana Silva
     status: "in_progress",
-    points: 80,
+    points: 0,
     deadline: "2026-03-20",
     created_at: "2026-03-02",
   },
@@ -249,7 +249,7 @@ export const mockTasks: Task[] = [
     description: "Criar testes automatizados",
     assignee: users[1], // Azis Admin
     status: "done",
-    points: 40,
+    points: 0,
     deadline: "2026-03-12",
     created_at: "2026-03-01",
   },
@@ -311,7 +311,7 @@ export const weeklyMoodData = [
 // =====================
 
 export const monthlyProductivity = [
-  { month: "Jan", tasks: 42, points: 1250 },
-  { month: "Fev", tasks: 38, points: 1100 },
-  { month: "Mar", tasks: 55, points: 1680 },
+  { month: "Jan", tasks: 42, points: 0 },
+  { month: "Fev", tasks: 38, points: 0 },
+  { month: "Mar", tasks: 55, points: 0 },
 ];

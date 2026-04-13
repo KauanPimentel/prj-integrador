@@ -19,7 +19,14 @@ export function sanitizeCsvContent(csvText: string): string {
     while (sanitized.endsWith(';') || sanitized.endsWith(',')) {
       sanitized = sanitized.slice(0, -1).trim()
     }
-    
+
+    // Accept lines fully quoted as one CSV value but containing comma-separated fields
+    const trimmed = sanitized.trim()
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      const inner = trimmed.slice(1, -1).replace(/""/g, '"')
+      sanitized = inner
+    }
+
     return sanitized
   })
   

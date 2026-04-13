@@ -21,6 +21,7 @@ import EvidenceModal from "@/components/EvidenceModal";
 import ReviewModal from "@/components/ReviewModal";
 import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import mascotVideo from "@/assets/mascot.mp4";
 
 const columns: { id: TaskStatus; title: string; color: string }[] = [
   { id: "todo", title: "A Fazer", color: "bg-info" },
@@ -151,6 +152,7 @@ export default function Kanban() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showMascot, setShowMascot] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -211,7 +213,12 @@ export default function Kanban() {
     }
   };
 
-  const handleCreateTask = async (data: { title: string; description: string; assignedTo: string }) => {
+  const handleCreateTask = async (data: { title: string; description: string; assignedTo: string; points: number }) => {
+    if (data.points < 1 || data.points > 1000) {
+      toast({ title: "Erro", description: "Os pontos devem estar entre 1 e 1000." });
+      return;
+    }
+
     try {
       const response = await fetch(getApiUrl("/api/tasks"), {
         method: "POST",
@@ -222,6 +229,7 @@ export default function Kanban() {
         body: JSON.stringify({
           title: data.title,
           description: data.description,
+          points: data.points,
           assignee_id: Number(data.assignedTo),
         }),
       });
@@ -464,6 +472,7 @@ export default function Kanban() {
         setTasks((prev) =>
           prev.map((t) => (t.id === active.id ? { ...t, status: targetStatus } : t)),
         );
+        if (targetStatus === 'done') setShowMascot(true);
         updateTaskStatus(active.id as string, targetStatus);
       }
       return;
@@ -501,7 +510,7 @@ export default function Kanban() {
           <h1 className="text-3xl font-heading font-bold text-foreground">Quadro Kanban</h1>
           <p className="text-muted-foreground mt-1">Arraste tarefas entre as colunas</p>
         </div>
-        {currentUser.role !== "funcionario" && (
+        {currentUser.role === "gestor" && (
           <TaskFormModal
             trigger={
               <Button className="bg-gradient-primary text-primary-foreground">
@@ -549,6 +558,52 @@ export default function Kanban() {
         onReview={handleReview}
         loading={actionLoading}
       />
+
+      {showMascot && (
+        <>
+          <style>{`
+            @keyframes mascotFadeIn {
+              from { opacity: 0; transform: scale(0.8); }
+              to { opacity: 1; transform: scale(1); }
+            }
+            @keyframes mascotFadeOut {
+              from { opacity: 1; transform: scale(1); }
+              to { opacity: 0; transform: scale(0.8); }
+            }
+          `}</style>
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              zIndex: 9999,
+              animation: 'mascotFadeIn 0.3s ease-out',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              background: 'rgba(0, 0, 0, 0.45)'
+            }}
+          >
+            <video
+              src={mascotVideo}
+              autoPlay
+              muted
+              onEnded={() => setTimeout(() => setShowMascot(false), 500)}
+              style={{
+                width: '350px',
+                maxWidth: '60vw',
+                borderRadius: '1rem',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)'
+              }}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

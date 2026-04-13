@@ -1,5 +1,7 @@
 const { Pool } = require('pg')
 const bcrypt = require('bcryptjs')
+const fs = require('fs')
+const path = require('path')
 const { getNivelFromRole } = require('../utils/roleUtils')
 
 const pool = new Pool({
@@ -128,7 +130,22 @@ async function initDB() {
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()")
   await pool.query("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()")
 
+  // =============================================================================
+  // Executar migrations SQL para triggers e sincronizações
+  // =============================================================================
+  try {
+    const migrationPath = path.join(__dirname, '..', 'migrations', '004_add_sync_user_points_trigger.sql')
+    if (fs.existsSync(migrationPath)) {
+      const migrationSql = fs.readFileSync(migrationPath, 'utf8')
+      await pool.query(migrationSql)
+      console.log('[initDB] Migration 004_add_sync_user_points_trigger.sql executada com sucesso')
+    }
+  } catch (error) {
+    console.error('[initDB] Erro ao executar migration SQL:', error.message)
+  }
+
   // Garantir colunas necessárias caso tabela já exista
+
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'funcionario'")
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS nivel INTEGER NOT NULL DEFAULT 1")
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255) NOT NULL")
@@ -150,12 +167,12 @@ async function initDB() {
   )
 
   const seedUsers = [
-    { name: 'Ana Silva', email: 'ana@azis.com', institution: 'Azis', role: 'gestor', points: 1250, position: 'CEO', managerEmail: null },
-    { name: 'Carlos Santos', email: 'carlos@azis.com', institution: 'Azis', role: 'funcionario', points: 980, position: 'Frontend Developer', managerEmail: 'ana@azis.com' },
-    { name: 'Maria Oliveira', email: 'maria@azis.com', institution: 'Azis', role: 'funcionario', points: 1100, position: 'Backend Developer', managerEmail: 'ana@azis.com' },
-    { name: 'Pedro Costa', email: 'pedro@azis.com', institution: 'Azis', role: 'funcionario', points: 750, position: 'QA Engineer', managerEmail: 'maria@azis.com' },
-    { name: 'Julia Lima', email: 'julia@azis.com', institution: 'Azis', role: 'funcionario', points: 890, position: 'UX Designer', managerEmail: 'carlos@azis.com' },
-    { name: 'Rafael Souza', email: 'rafael@azis.com', institution: 'Azis', role: 'funcionario', points: 1350, position: 'DevOps Engineer', managerEmail: 'ana@azis.com' },
+    { name: 'Ana Silva', email: 'ana@azis.com', institution: 'Azis', role: 'gestor', position: 'CEO', managerEmail: null },
+    { name: 'Carlos Santos', email: 'carlos@azis.com', institution: 'Azis', role: 'funcionario', position: 'Frontend Developer', managerEmail: 'ana@azis.com' },
+    { name: 'Maria Oliveira', email: 'maria@azis.com', institution: 'Azis', role: 'funcionario', position: 'Backend Developer', managerEmail: 'ana@azis.com' },
+    { name: 'Pedro Costa', email: 'pedro@azis.com', institution: 'Azis', role: 'funcionario', position: 'QA Engineer', managerEmail: 'maria@azis.com' },
+    { name: 'Julia Lima', email: 'julia@azis.com', institution: 'Azis', role: 'funcionario', position: 'UX Designer', managerEmail: 'carlos@azis.com' },
+    { name: 'Rafael Souza', email: 'rafael@azis.com', institution: 'Azis', role: 'funcionario', position: 'DevOps Engineer', managerEmail: 'ana@azis.com' },
   ]
 
   const defaultPassword = '123456'
@@ -168,15 +185,15 @@ async function initDB() {
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [user.email])
     if (existing.rows.length === 0) {
       const insertResult = await pool.query(
-        'INSERT INTO users (name, email, institution, role, nivel, points, position, password) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-        [user.name, user.email, user.institution, user.role, nivel, user.points, user.position, hashedPassword]
+        'INSERT INTO users (name, email, institution, role, nivel, position, password) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+        [user.name, user.email, user.institution, user.role, nivel, user.position, hashedPassword]
       )
       userId = insertResult.rows[0].id
     } else {
       userId = existing.rows[0].id
       await pool.query(
-        'UPDATE users SET role = $1, nivel = $2, points = $3, position = $4 WHERE id = $5',
-        [user.role, nivel, user.points, user.position, userId]
+        'UPDATE users SET role = $1, nivel = $2, position = $3 WHERE id = $4',
+        [user.role, nivel, user.position, userId]
       )
     }
 
@@ -187,12 +204,12 @@ async function initDB() {
       }
     }
 
-    // Inicializar ou sincronizar user_points
+    // Inicializar user_points com 0
     await pool.query(
       `INSERT INTO user_points (user_id, total_points, updated_at) 
-       VALUES ($1, $2, NOW()) 
-       ON CONFLICT (user_id) DO UPDATE SET total_points = $2, updated_at = NOW()`,
-      [userId, user.points]
+       VALUES ($1, 0, NOW()) 
+       ON CONFLICT (user_id) DO UPDATE SET total_points = 0, updated_at = NOW()`,
+      [userId]
     )
   }
 }
