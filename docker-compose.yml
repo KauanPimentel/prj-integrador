@@ -30,10 +30,23 @@ services:
       - DB_NAME=projeto
       - DB_INIT_RETRIES=20
       - DB_INIT_RETRY_DELAY_MS=3000
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - SMTP_USER=
+      - SMTP_PASS=
+      - FRONTEND_URL=http://localhost:8080
     depends_on:
-      database:
-        condition: service_healthy
+      - mailhog
+      - database
     restart: always
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: azis_mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
 
   database:
     image: postgres:15
@@ -51,9 +64,8 @@ services:
       start_period: 10s
     restart: always
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
   frontend_node_modules:
   backend_node_modules:

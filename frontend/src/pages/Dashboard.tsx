@@ -1,9 +1,11 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@/hooks/use-theme";
-import { getCurrentUser } from "@/data/mock";
+import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { Chart, CategoryScale, LinearScale, BarElement, BarController, Tooltip, Title } from "chart.js";
+import BadgeClaimModal from "@/components/BadgeClaimModal";
+import { ParticleCard, GlobalSpotlight } from "@/components/ParticleCard";
 
 Chart.register(CategoryScale, LinearScale, BarElement, BarController, Tooltip, Title);
 
@@ -12,6 +14,7 @@ type BadgeItem = {
   title: string;
   points: number;
   unlocked: boolean;
+  claimed: boolean;
   image?: string;
 };
 
@@ -27,31 +30,11 @@ type LeaderboardEntry = {
   points: number;
 };
 
-const BADGE_FALLBACK: BadgeItem[] = [
-  { id: "primeira-missao", title: "Super Tarefa Bros!", points: 50, unlocked: true, image: "/badges/SELO_-_MARIO-removebg-preview.png" },
-  { id: "velocidade-entrega", title: "Velocidade de Entrega", points: 100, unlocked: true, image: "/badges/SELO_-_SONIC-removebg-preview.png" },
-  { id: "homem-de-aco", title: "O Homem de Aço Ganhou Pontos", points: 150, unlocked: true, image: "/badges/SELO_-_SUPER_MAN-removebg-preview.png" },
-  { id: "camara-segredos", title: "A Câmara dos Segredos Produtivos", points: 300, unlocked: false, image: "/badges/SELO_-_HARRY_POTTER-removebg-preview.png" },
-  { id: "grandes-pontos", title: "Com Grandes Pontos Vêm Grandes Recompensas", points: 400, unlocked: false, image: "/badges/SELO_-_HOMEM_ARANHA-removebg-preview%20(1).png" },
-  { id: "origem-entregas", title: "A Origem das Entregas", points: 500, unlocked: false, image: "/badges/SELO_-_LARA_CROFT-removebg-preview.png" },
-  { id: "recompensa-contra", title: "A Recompensa Contra-Ataca", points: 750, unlocked: false, image: "/badges/SELO_-_STAR_WARS-removebg-preview.png" },
-  { id: "rei-das-metas", title: "O Rei das Metas", points: 875, unlocked: false, image: "/badges/SELO_-_SIMBA-removebg-preview.png" },
-  { id: "lenda-funcionario", title: "A Lenda do Funcionário", points: 1000, unlocked: false, image: "/badges/SELO_-_ZELDA-removebg-preview.png" },
-];
-
-const MONTHLY_FALLBACK: MonthlyStat[] = [
-  { month: "Jan", value: 38 },
-  { month: "Fev", value: 35 },
-  { month: "Mar", value: 55 },
-];
-
-const LEADERBOARD_FALLBACK: LeaderboardEntry[] = [
-  { id: "u1", name: "Ana Silva", role: "Gestor", points: 940 },
-  { id: "u2", name: "Bruno Duarte", role: "Funcionário", points: 860 },
-  { id: "u3", name: "Carla Mendes", role: "Funcionária", points: 780 },
-  { id: "u4", name: "Daniel Reis", role: "Funcionário", points: 640 },
-  { id: "u5", name: "Eduarda Costa", role: "Funcionária", points: 520 },
-];
+type CurrentUser = {
+  id?: string;
+  name?: string;
+  points?: number;
+};
 
 const getInitials = (name: string) =>
   name
@@ -89,18 +72,44 @@ const getPositionStyles = (position: number) => {
 };
 
 export default function Dashboard() {
-  const currentUser = getCurrentUser();
+  const { user } = useAuth();
+  const [currentUser, setCurrentUser] = useState<CurrentUser>(user ?? {});
   const isDark = useTheme();
   const chartCanvas = useRef<HTMLCanvasElement | null>(null);
   const chartInstance = useRef<Chart | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
-  const [badges, setBadges] = useState<BadgeItem[]>(BADGE_FALLBACK);
-  const [monthly, setMonthly] = useState<MonthlyStat[]>(MONTHLY_FALLBACK);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(LEADERBOARD_FALLBACK);
+  const [userPoints, setUserPoints] = useState<number>(Number(user?.points ?? 0));
+  const [badges, setBadges] = useState<BadgeItem[]>([]);
+  const [monthly, setMonthly] = useState<MonthlyStat[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [completedTasks, setCompletedTasks] = useState(0);
+  const [pendingBadge, setPendingBadge] = useState<BadgeItem | null>(null);
+
+  useEffect(() => {
+    const nextToClaim = badges.find(b => b.unlocked && !b.claimed);
+    if (nextToClaim && !pendingBadge) {
+      setPendingBadge(nextToClaim);
+    }
+  }, [badges, pendingBadge]);
 
   const userName = currentUser.name?.split(" ")[0] ?? "Usuário";
-  const userPoints = Number(currentUser.points ?? 0);
+
+  const handleClaimBadge = async (badgeId: string) => {
+    try {
+      const response = await fetch(getApiUrl(`/api/badges/${badgeId}/claim`), {
+        method: "POST",
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      if (response.ok) {
+        setBadges(prev => prev.map(b => b.id === badgeId ? { ...b, claimed: true } : b));
+        setPendingBadge(null);
+      }
+    } catch (error) {
+      console.error("Claim badge error:", error);
+    }
+  };
 
   const visibleLeaderboard = useMemo(() => {
     const sorted = [...leaderboard].sort((a, b) => b.points - a.points);
@@ -125,13 +134,20 @@ export default function Dashboard() {
   const distanceToTop = Math.max(0, topScore - currentPoints);
   const progressToTop = topScore > 0 ? Math.min(1, currentPoints / topScore) : 0;
 
+  useEffect(() => {
+    if (user) {
+      setCurrentUser(user);
+      setUserPoints(Number(user.points ?? 0));
+    }
+  }, [user]);
+
   const loadDashboardData = async () => {
     try {
-      const [badgesResponse, statsResponse, leaderboardResponse, tasksResponse] = await Promise.all([
-        fetch(getApiUrl("/api/badges"), { headers: getAuthHeaders() }),
-        fetch(getApiUrl("/api/stats/monthly"), { headers: getAuthHeaders() }),
-        fetch(getApiUrl("/api/leaderboard"), { headers: getAuthHeaders() }),
-        fetch(getApiUrl("/api/tasks"), { headers: getAuthHeaders() }),
+      const [badgesResponse, statsResponse, leaderboardResponse, profileResponse] = await Promise.all([
+        fetch(getApiUrl("/api/badges"), { headers: getAuthHeaders(), credentials: 'include' }),
+        fetch(getApiUrl("/api/stats/monthly"), { headers: getAuthHeaders(), credentials: 'include' }),
+        fetch(getApiUrl("/api/rewards/leaderboard"), { headers: getAuthHeaders(), credentials: 'include' }),
+        fetch(getApiUrl("/api/users/me"), { headers: getAuthHeaders(), credentials: 'include' }),
       ]);
 
       if (badgesResponse.ok) {
@@ -143,7 +159,8 @@ export default function Dashboard() {
               id: item.id?.toString() ?? `badge-${index}`,
               title: item.title ?? item.name ?? `Selo ${index + 1}`,
               points: Number(item.points ?? item.cost ?? 0),
-              unlocked: Boolean(item.unlocked ?? item.completed ?? item.claimed),
+              unlocked: Boolean(item.unlocked),
+              claimed: Boolean(item.claimed),
               image: item.image ?? item.icon ?? undefined,
             })),
           );
@@ -156,7 +173,7 @@ export default function Dashboard() {
         if (Array.isArray(raw) && raw.length > 0) {
           setMonthly(
             raw.map((item: any, index: number) => ({
-              month: String(item.month ?? item.label ?? MONTHLY_FALLBACK[index]?.month ?? `Mês ${index + 1}`),
+              month: String(item.month ?? item.label ?? `Mês ${index + 1}`),
               value: Number(item.value ?? item.points ?? item.total ?? 0),
             })),
           );
@@ -165,30 +182,42 @@ export default function Dashboard() {
 
       if (leaderboardResponse.ok) {
         const payload = await leaderboardResponse.json();
-        const raw = payload?.leaderboard ?? payload;
+        const raw = payload?.data ?? payload?.leaderboard ?? payload;
         if (Array.isArray(raw) && raw.length > 0) {
           setLeaderboard(
-            raw.map((item: any, index: number) => ({
-              id: item.id?.toString() ?? `user-${index}`,
-              name: item.name ?? item.fullName ?? "Usuário",
-              role: item.role ?? item.position ?? "Funcionário",
-              points: Number(item.points ?? item.score ?? 0),
-            })),
+            [...raw]
+              .sort((a: any, b: any) => Number(b.total_points ?? b.points ?? b.score ?? 0) - Number(a.total_points ?? a.points ?? a.score ?? 0))
+              .map((item: any, index: number) => ({
+                id: String(item.user_id ?? item.id ?? `user-${index}`),
+                name: item.name ?? item.fullName ?? "Usuário",
+                role: item.role ?? item.position ?? "Funcionário",
+                points: Number(item.total_points ?? item.points ?? item.score ?? 0),
+              })),
           );
         }
       }
 
-      if (tasksResponse.ok) {
-        const payload = await tasksResponse.json();
-        const rawTasks = payload?.tasks ?? payload;
-        if (Array.isArray(rawTasks)) {
-          setCompletedTasks(
-            rawTasks.filter((task: any) => task.status === "approved" || task.status === "done").length,
-          );
+      if (profileResponse.ok) {
+        const payload = await profileResponse.json();
+        setCompletedTasks(Number(payload.tasks_count ?? 0));
+
+        const stored = localStorage.getItem("azis_user");
+        const userData = {
+          id: String(payload.id ?? payload.user_id ?? payload.uuid ?? ""),
+          name: payload.name ?? payload.fullName ?? payload.username ?? "Usuário",
+          points: Number(payload.points ?? payload.total_points ?? payload.score ?? 0),
+        };
+
+        setCurrentUser(userData);
+        setUserPoints(userData.points);
+
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          localStorage.setItem("azis_user", JSON.stringify({ ...parsed, ...payload }));
         }
       }
     } catch (error) {
-      console.error("Dashboard load error:", error);
+      console.error("Error loading dashboard data:", error);
     }
   };
 
@@ -292,7 +321,8 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[color:var(--bg)] text-[color:var(--text)]">
-      <div className="grid gap-5 px-[28px] py-[24px]">
+      <GlobalSpotlight gridRef={gridRef} spotlightRadius={410} />
+      <div ref={gridRef} className="grid gap-5 px-[28px] py-[24px] pc-section">
         <header className="flex items-center justify-between h-16 rounded-3xl bg-[color:var(--surface)] border border-[color:var(--border)] px-6">
           <div>
             <p className="text-[20px] font-heading font-bold text-[color:var(--text-strong)]">
@@ -309,12 +339,12 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <motion.section
+        <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          className="rounded-[16px] bg-[color:var(--surface)] border border-[color:var(--border)] p-6"
         >
+        <ParticleCard className="rounded-[16px] bg-[color:var(--surface)] border border-[color:var(--border)] p-6" clickEffect={true} enableStars={true}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-[13px] uppercase tracking-[0.22em] font-heading font-semibold text-[color:var(--muted)]">
               🏅 Seus Selos
@@ -328,25 +358,25 @@ export default function Dashboard() {
             <div className="flex gap-3 min-w-[max-content]">
               {badges.map((badge) => (
                 <div key={badge.id} className="flex-shrink-0 w-[92px]">
-                  <div className={`relative flex h-[72px] w-[72px] items-center justify-center rounded-[14px] border border-[color:var(--border)] overflow-hidden ${badge.unlocked ? "shadow-[0_0_18px_rgba(124,58,237,0.25)]" : "bg-[color:var(--bar-bg)]"}`}
+                  <div className={`relative flex h-[72px] w-[72px] items-center justify-center rounded-[14px] border border-[color:var(--border)] overflow-hidden ${badge.claimed ? "shadow-[0_0_18px_rgba(124,58,237,0.25)]" : "bg-[color:var(--bar-bg)]"} ${badge.unlocked && !badge.claimed ? "animate-pulse border-accent/50" : ""}`}
                     style={{
-                      borderColor: badge.unlocked ? "rgba(124,58,237,0.35)" : "var(--border)",
-                      backgroundColor: badge.unlocked ? "var(--accent-glow)" : "var(--bar-bg)",
+                      borderColor: badge.claimed ? "rgba(124,58,237,0.35)" : (badge.unlocked ? "var(--accent)" : "var(--border)"),
+                      backgroundColor: badge.claimed ? "var(--accent-glow)" : "var(--bar-bg)",
                     }}
                   >
                     {badge.image ? (
                       <img
                         src={badge.image}
                         alt={badge.title}
-                        className={`absolute inset-0 h-full w-full object-cover ${badge.unlocked ? "" : "grayscale opacity-60"}`}
+                        className={`absolute inset-0 h-full w-full object-cover ${(badge.claimed || badge.unlocked) ? "" : "grayscale opacity-60"}`}
                       />
                     ) : (
-                      <span className={`text-[30px] ${badge.unlocked ? "" : "opacity-50"}`}>
-                        {badge.unlocked ? badge.title.split(" ")[0] === "🎯" ? "🎯" : badge.title.split(" ")[0] : "🔐"}
+                      <span className={`text-[30px] ${(badge.claimed || badge.unlocked) ? "" : "opacity-50"}`}>
+                        {(badge.claimed || badge.unlocked) ? badge.title.split(" ")[0] === "🎯" ? "🎯" : badge.title.split(" ")[0] : "🔐"}
                       </span>
                     )}
                     <div className="absolute inset-0 bg-black/10" />
-                    {badge.unlocked && (
+                    {badge.claimed && (
                       <div className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[color:var(--green)] text-[8px] text-white">
                         ✓
                       </div>
@@ -355,14 +385,20 @@ export default function Dashboard() {
                   <p className="mt-3 text-[11px] text-[color:var(--muted)] text-center leading-4 break-words max-w-[80px]">
                     {badge.title}
                   </p>
-                  <p className={`mt-1 text-[11px] ${badge.unlocked ? "text-[color:var(--accent-soft)] font-medium" : "text-[color:var(--muted)]"} text-center`}>
+                  <p className={`mt-1 text-[11px] ${badge.claimed ? "text-[color:var(--accent-soft)] font-medium" : "text-[color:var(--muted)]"} text-center`}>
                     {badge.points} pts
                   </p>
                 </div>
               ))}
             </div>
           </div>
-        </motion.section>
+          <BadgeClaimModal
+            badge={pendingBadge}
+            onClaim={handleClaimBadge}
+            onClose={() => setPendingBadge(null)}
+          />
+        </ParticleCard>
+        </motion.div>
 
         <div className="grid gap-5 xl:grid-cols-[1fr_320px]">
           <div className="space-y-5">
@@ -395,7 +431,7 @@ export default function Dashboard() {
                   icon: "🏆",
                 },
               ].map((stat) => (
-                <div key={stat.label} className="rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                <ParticleCard key={stat.label} className="rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] p-4" enableTilt={true} enableMagnetism={true} clickEffect={true} enableStars={true}>
                   <div className="flex items-center justify-between gap-3 mb-4">
                     <span className="text-lg">{stat.icon}</span>
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${stat.pillClass}`}>
@@ -406,31 +442,32 @@ export default function Dashboard() {
                     {stat.value}
                   </div>
                   <div className="mt-2 text-[12px] text-[color:var(--muted)]">{stat.label}</div>
-                </div>
+                </ParticleCard>
               ))}
             </motion.div>
 
-            <motion.section
+            <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1], delay: 0.08 }}
-              className="rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] p-5"
             >
-              <div className="flex items-center justify-between gap-3 text-[13px] uppercase font-heading font-semibold text-[color:var(--muted)]">
-                <span>📊 Produtividade Mensal</span>
-              </div>
-              <div className="mt-6 h-[320px]">
-                <canvas ref={chartCanvas} />
-              </div>
-            </motion.section>
+              <ParticleCard className="rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] p-5" clickEffect={true} enableStars={true}>
+                <div className="flex items-center justify-between gap-3 text-[13px] uppercase font-heading font-semibold text-[color:var(--muted)]">
+                  <span>📊 Produtividade Mensal</span>
+                </div>
+                <div className="mt-6 h-[320px]">
+                  <canvas ref={chartCanvas} />
+                </div>
+              </ParticleCard>
+            </motion.div>
           </div>
 
-          <motion.aside
+          <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
-            className="rounded-[16px] border border-[color:var(--border)] bg-[color:var(--surface)] p-5"
           >
+          <ParticleCard className="rounded-[16px] border border-[color:var(--border)] bg-[color:var(--surface)] p-5" clickEffect={true} enableStars={true}>
             <div className="mb-5 flex items-center justify-between gap-3 text-[13px] uppercase font-heading font-semibold text-[color:var(--muted)]">
               <span>👥 Ranking da Equipe</span>
             </div>
@@ -470,7 +507,8 @@ export default function Dashboard() {
                 <div className="h-full rounded-full bg-[color:var(--accent)]" style={{ width: `${Math.max(6, progressToTop * 100)}%` }} />
               </div>
             </div>
-          </motion.aside>
+          </ParticleCard>
+          </motion.div>
         </div>
       </div>
     </div>

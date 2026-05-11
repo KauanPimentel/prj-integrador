@@ -79,6 +79,10 @@ web_modules/
 .env.production.local
 .env.local
 
+# local database data
+/data/
+*.sql
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

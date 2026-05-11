@@ -16,6 +16,7 @@ export interface User {
   institution_id: string;
   position?: string;
   gestorId?: string | null;
+  must_change_password?: boolean;
 }
 
 export interface Task {
@@ -27,6 +28,8 @@ export interface Task {
   points: number;
   deadline: string;
   created_at: string;
+  gestorId?: string | null;
+  createdBy?: string | null;
   isDeleting?: boolean;
   deleteCountdown?: number;
 }
@@ -168,16 +171,12 @@ export function resetActiveUsers() {
 // USER FUNCTIONS
 // =====================
 
-export function getUserById(id: string): User | undefined {
-  const currentUsers = getActiveUsers();
-  return currentUsers.find((u) => u.id === id);
-}
+export function getManagerName(gestorId?: string | number | null): string {
+  if (gestorId === null || gestorId === undefined || gestorId === "") return "Sem gestor";
 
-export function getManagerName(gestorId?: string | null): string {
-  if (!gestorId) return "Sem gestor";
-
+  const targetId = gestorId.toString();
   const currentUsers = getActiveUsers();
-  const manager = currentUsers.find((u) => u.id === gestorId);
+  const manager = currentUsers.find((u) => u.id.toString() === targetId);
   return manager ? manager.name : "Gestor não encontrado";
 }
 
@@ -219,74 +218,6 @@ export function getCurrentUser(): User {
 }
 
 // =====================
-// TASKS
-// =====================
-
-export const mockTasks: Task[] = [
-  {
-    id: "t1",
-    title: "Redesign da landing page",
-    description: "Atualizar o design da página inicial",
-    assignee: users[0], // Ana Silva
-    status: "todo",
-    points: 0,
-    deadline: "2026-03-15",
-    created_at: "2026-03-01",
-  },
-  {
-    id: "t2",
-    title: "Implementar API de pagamentos",
-    description: "Integrar gateway de pagamento",
-    assignee: users[0], // Ana Silva
-    status: "in_progress",
-    points: 0,
-    deadline: "2026-03-20",
-    created_at: "2026-03-02",
-  },
-  {
-    id: "t3",
-    title: "Testes de integração",
-    description: "Criar testes automatizados",
-    assignee: users[1], // Azis Admin
-    status: "done",
-    points: 0,
-    deadline: "2026-03-12",
-    created_at: "2026-03-01",
-  },
-];
-
-// =====================
-// REWARDS
-// =====================
-
-export const mockRewards: Reward[] = [
-  {
-    id: "r1",
-    name: "Day Off",
-    description: "Um dia de folga extra",
-    image: "🏖️",
-    cost: 500,
-    available: 3,
-  },
-  {
-    id: "r2",
-    name: "Vale Almoço",
-    description: "Vale refeição",
-    image: "🍽️",
-    cost: 200,
-    available: 10,
-  },
-  {
-    id: "r3",
-    name: "Curso Online",
-    description: "Acesso a um curso na plataforma parceira",
-    image: "📚",
-    cost: 800,
-    available: 5,
-  },
-];
-
-// =====================
 // MOOD
 // =====================
 
@@ -298,20 +229,4 @@ export const moodLabels: Record<MoodType, { emoji: string; label: string }> = {
   stressed: { emoji: "😤", label: "Estressado" },
 };
 
-export const weeklyMoodData = [
-  { day: "Seg", happy: 4, neutral: 2, sad: 0 },
-  { day: "Ter", happy: 3, neutral: 2, sad: 1 },
-  { day: "Qua", happy: 5, neutral: 1, sad: 0 },
-  { day: "Qui", happy: 3, neutral: 3, sad: 0 },
-  { day: "Sex", happy: 4, neutral: 1, sad: 1 },
-];
-
-// =====================
-// PRODUCTIVITY
-// =====================
-
-export const monthlyProductivity = [
-  { month: "Jan", tasks: 42, points: 0 },
-  { month: "Fev", tasks: 38, points: 0 },
-  { month: "Mar", tasks: 55, points: 0 },
-];
+export const weeklyMoodData: Array<{ day: string; happy: number; neutral: number; sad: number }> = [];

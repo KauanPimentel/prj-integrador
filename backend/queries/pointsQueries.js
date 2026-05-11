@@ -1,6 +1,7 @@
 const { pool } = require('../config/db')
+const { checkAndUnlockBadges } = require('../controllers/badgeController')
 
-async function addPointsToUser(userId, points) {
+async function addPointsToUser(userId, points, taskId = null, taskTitle = null) {
   if (!userId || points <= 0) {
     throw new Error('Parâmetros inválidos para addPointsToUser')
   }
@@ -17,12 +18,24 @@ async function addPointsToUser(userId, points) {
       await client.query('INSERT INTO user_points (user_id, total_points, updated_at) VALUES ($1, $2, NOW())', [userId, points])
     }
 
-    // Sincronizar com a tabela users
-    await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [points, userId])
+    // O trigger trg_sync_user_points já sincroniza automaticamente
+    // Não é necessário fazer UPDATE manual aqui - isso causaria duplicação
+    // A tabela user_points é a fonte da verdade, e o trigger mantém users.points sincronizado
+
+    // Registrar no histórico de pontos
+    await client.query(
+      'INSERT INTO points_history (user_id, points, task_id, task_title, created_at) VALUES ($1, $2, $3, $4, NOW())',
+      [userId, points, taskId || null, taskTitle || null]
+    )
 
     await client.query('COMMIT')
 
     const updated = await pool.query('SELECT total_points FROM user_points WHERE user_id = $1', [userId])
+    const newTotalPoints = updated.rows[0].total_points
+
+    // Verificar novos selos de forma assíncrona (não bloqueante)
+    checkAndUnlockBadges(userId, newTotalPoints).catch(err => console.error('[Badges] Error in background check:', err))
+
     return updated.rows[0]
   } catch (error) {
     await client.query('ROLLBACK')

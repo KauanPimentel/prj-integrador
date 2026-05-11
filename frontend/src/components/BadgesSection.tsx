@@ -2,81 +2,25 @@ import { motion } from "framer-motion";
 import { Star, CheckCircle2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const MOCK_BADGES = [
-  {
-    id: 1,
-    name: "Super Tarefa Bros!",
-    points_required: 50,
-    unlocked: true,
-    unlocked_at: "2024-01-10",
-    image: "/badges/SELO_-_MARIO-removebg-preview.png",
-  },
-  {
-    id: 2,
-    name: "Velocidade de Entrega",
-    points_required: 100,
-    unlocked: true,
-    unlocked_at: "2024-01-15",
-    image: "/badges/SELO_-_SONIC-removebg-preview.png",
-  },
-  {
-    id: 3,
-    name: "O Homem de Aço Ganhou Pontos",
-    points_required: 150,
-    unlocked: true,
-    unlocked_at: "2024-01-20",
-    image: "/badges/SELO_-_SUPER_MAN-removebg-preview.png",
-  },
-  {
-    id: 4,
-    name: "A Câmara dos Segredos Produtivos",
-    points_required: 300,
-    unlocked: false,
-    image: "/badges/SELO_-_HARRY_POTTER-removebg-preview.png",
-  },
-  {
-    id: 5,
-    name: "A Origem das Entregas",
-    points_required: 500,
-    unlocked: false,
-    image: "/badges/SELO_-_LARA_CROFT-removebg-preview.png",
-  },
-  {
-    id: 6,
-    name: "Com Grandes Pontos Vêm Grandes Recompensas",
-    points_required: 400,
-    unlocked: false,
-    image: "/badges/SELO_-_HOMEM_ARANHA-removebg-preview%20(1).png",
-  },
-  {
-    id: 7,
-    name: "A Recompensa Contra-Ataca",
-    points_required: 750,
-    unlocked: false,
-    image: "/badges/SELO_-_STAR_WARS-removebg-preview.png",
-  },
-  {
-    id: 8,
-    name: "O Rei das Metas",
-    points_required: 875,
-    unlocked: false,
-    image: "/badges/SELO_-_SIMBA-removebg-preview.png",
-  },
-  {
-    id: 9,
-    name: "A Lenda do Funcionário do Tempo",
-    points_required: 1000,
-    unlocked: false,
-    image: "/badges/SELO_-_ZELDA-removebg-preview.png",
-  },
-];
+interface Badge {
+  id: number;
+  name: string;
+  points_required: number;
+  unlocked: boolean;
+  unlocked_at?: string;
+  image: string;
+}
 
-export default function BadgesSection() {
-  const unlockedBadges = MOCK_BADGES.filter(b => b.unlocked);
+interface BadgesSectionProps {
+  badges?: Badge[];
+}
+
+export default function BadgesSection({ badges = [] }: BadgesSectionProps) {
+  const unlockedBadges = badges.filter(b => b.unlocked);
   const unlockedCount = unlockedBadges.length;
-  const totalBadges = MOCK_BADGES.length;
-  const progressPercent = (unlockedCount / totalBadges) * 100;
-  const nextBadge = MOCK_BADGES.find(b => !b.unlocked);
+  const totalBadges = badges.length;
+  const progressPercent = totalBadges > 0 ? (unlockedCount / totalBadges) * 100 : 0;
+  const nextBadge = badges.find(b => !b.unlocked);
 
   return (
     <div className="space-y-6">
@@ -107,9 +51,14 @@ export default function BadgesSection() {
       </div>
 
       {/* Badges Grid */}
+      {badges.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <p>Nenhum selo disponível no momento</p>
+        </div>
+      ) : (
       <div className="overflow-x-auto pb-4">
         <div className="flex gap-4 min-w-max">
-          {MOCK_BADGES.map((badge, index) => (
+          {badges.map((badge, index) => (
             <TooltipProvider key={badge.id}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -154,6 +103,7 @@ export default function BadgesSection() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Legend */}
       <div className="flex gap-6 text-sm text-muted-foreground">

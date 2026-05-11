@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { getActiveUsers, getCurrentUser, getUserById, getManagerName, saveActiveUsers, type User } from "@/data/mock";
+import { getActiveUsers, getCurrentUser, getManagerName, saveActiveUsers, type User } from "@/data/mock";
+import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl, getAuthHeaders } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -66,11 +67,12 @@ function TreeNode({ user, level, selectedId, onSelect, allUsers }: TreeNodeProps
 }
 
 export default function OrgStructure() {
+  const { user } = useAuth();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newGestorId, setNewGestorId] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
-  const currentUser = getCurrentUser();
+  const currentUser = user ?? getCurrentUser();
   const [users, setUsers] = useState<User[]>(getActiveUsers());
   const visibleUsers = [...users].sort(sortUsers);
 
@@ -87,13 +89,19 @@ export default function OrgStructure() {
   useEffect(() => {
     const apiUrl = getApiUrl("/api/users");
 
-    fetch(apiUrl, { headers: getAuthHeaders() })
+    fetch(apiUrl, { headers: getAuthHeaders(), credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
           const normalized = data.map((u) => ({
             ...u,
-            gestorId: u.gestorId ?? (u as any).gestor_id ?? null,
+            id: u.id?.toString(),
+            gestorId:
+              u.gestorId != null
+                ? u.gestorId.toString()
+                : (u as any).gestor_id != null
+                ? (u as any).gestor_id.toString()
+                : null,
           }))
           setUsers(normalized)
           saveActiveUsers(normalized)
@@ -142,6 +150,7 @@ export default function OrgStructure() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ gestorId: newGestorId || null }),
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -185,6 +194,7 @@ export default function OrgStructure() {
     const response = await fetch(getApiUrl(`/api/users/${selectedUser.id}`), {
       method: "DELETE",
       headers: getAuthHeaders(),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -198,7 +208,7 @@ export default function OrgStructure() {
     }
 
     // Refresh from backend to ensure IDs and list are consistent
-    const refreshed = await fetch(getApiUrl("/api/users"), { headers: getAuthHeaders() })
+    const refreshed = await fetch(getApiUrl("/api/users"), { headers: getAuthHeaders(), credentials: 'include' })
       .then((r) => r.json())
       .catch(() => users);
     const nextUsers = Array.isArray(refreshed) ? refreshed : users;

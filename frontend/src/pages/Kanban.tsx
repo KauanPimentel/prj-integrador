@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Calendar, Star, User, MoreVertical, Eye, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Calendar, Star, User, MoreVertical, Eye, CheckCircle, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getActiveUsers, getCurrentUser, Task, TaskStatus } from "@/data/mock";
+import { getCurrentUser, Task, TaskStatus } from "@/data/mock";
+import { useAuth } from "@/contexts/AuthContext";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDroppable } from "@dnd-kit/core";
@@ -20,8 +21,9 @@ import TaskFormModal from "@/components/TaskFormModal";
 import EvidenceModal from "@/components/EvidenceModal";
 import ReviewModal from "@/components/ReviewModal";
 import { getApiUrl, getAuthHeaders } from "@/lib/api";
+import { ParticleCard } from "@/components/ParticleCard";
 import { toast } from "@/hooks/use-toast";
-import mascotVideo from "@/assets/mascot.mp4";
+import mascotVideo from "@/assets/mascot  new.gif";
 
 const columns: { id: TaskStatus; title: string; color: string }[] = [
   { id: "todo", title: "A Fazer", color: "bg-info" },
@@ -31,8 +33,49 @@ const columns: { id: TaskStatus; title: string; color: string }[] = [
   { id: "rejected", title: "Reprovado", color: "bg-destructive" },
 ];
 
-function TaskCard({ task, isDragging, onReviewClick, onDelete }: { task: Task; isDragging?: boolean; onReviewClick?: (task: Task) => void; onDelete?: (task: Task) => void }) {
+function parseLocalDate(deadline: string | Date) {
+  if (deadline instanceof Date) {
+    return deadline;
+  }
+
+  const normalized = deadline.trim();
+
+  // ISO date only: YYYY-MM-DD
+  const simpleDateMatch = normalized.match(/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/);
+  if (simpleDateMatch) {
+    const [, year, month, day] = simpleDateMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+
+  // ISO datetime: YYYY-MM-DDTHH:mm:ssZ or with timezone offset
+  const isoDatetimeMatch = normalized.match(/^([0-9]{4}-[0-9]{2}-[0-9]{2})T.*$/);
+  if (isoDatetimeMatch) {
+    return new Date(normalized);
+  }
+
+  // Fallback to browser parser for any other string format
+  const fallback = new Date(normalized);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function formatKanbanDeadline(deadline?: string | null) {
+  if (!deadline) return "Sem data";
+  const date = parseLocalDate(deadline);
+  if (!date) return "Sem data";
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function TaskCard({ task, isDragging, onReviewClick, onDelete, onEdit }: { task: Task; isDragging?: boolean; onReviewClick?: (task: Task) => void; onDelete?: (task: Task) => void; onEdit?: (task: Task) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: task.id });
+  const { user } = useAuth();
+  const currentUser = user ?? getCurrentUser();
+
+  const getLevelFromPoints = (points: number) => {
+    if (points === 25) return "Básico";
+    if (points === 75) return "Médio";
+    if (points === 125) return "Avançado";
+    return `${points} pts`; // fallback
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -40,17 +83,17 @@ function TaskCard({ task, isDragging, onReviewClick, onDelete }: { task: Task; i
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const currentUser = getCurrentUser();
-  const canReview = currentUser.nivel >= 2 && task.status === "done";
-  const canMarkDone = currentUser.nivel === 1 && task.assignee.id === currentUser.id && task.status === "in_progress";
-  const canDelete = (currentUser.role === "gestor" || currentUser.role === "admin") && (task.status === "approved" || task.status === "rejected");
+  const isManager = currentUser.role === "gestor" || currentUser.role === "admin";
+  const currentUserId = String(currentUser.id);
+  const canReview = currentUser.nivel >= 2 && task.status === "done" && task.gestorId === currentUserId;
+  const canMarkDone = currentUser.nivel === 1 && task.assignee.id === currentUserId && task.status === "in_progress";
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Card className="p-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow border border-border bg-card relative">
+      <ParticleCard className="rounded-xl p-4 cursor-grab active:cursor-grabbing border border-border bg-card relative" enableStars={true} clickEffect={false} enableTilt={false} enableMagnetism={false}>
         <div className="flex items-start justify-between mb-2">
           <h4 className="font-medium text-sm text-foreground flex-1 pr-8">{task.title}</h4>
-          {(canReview || canMarkDone || canDelete) && (
+          {(canReview || canMarkDone || isManager) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -75,12 +118,20 @@ function TaskCard({ task, isDragging, onReviewClick, onDelete }: { task: Task; i
                     Revisar Tarefa
                   </DropdownMenuItem>
                 )}
-                {canDelete && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete?.(task); }}>
-                    <XCircle className="w-4 h-4 mr-2" />
-                    {task.status === "approved" ? "Excluir (será removida em 7s)" : "Excluir"}
-                    {task.isDeleting ? ` (${task.deleteCountdown ?? 7}s)` : ""}
-                  </DropdownMenuItem>
+                {isManager && (
+                  <>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit?.(task); }}>
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => { e.stopPropagation(); onDelete?.(task); }}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      {task.isDeleting ? `Excluindo em ${task.deleteCountdown ?? 7}s...` : "Excluir"}
+                    </DropdownMenuItem>
+                  </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -96,12 +147,12 @@ function TaskCard({ task, isDragging, onReviewClick, onDelete }: { task: Task; i
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
               <Star className="w-3.5 h-3.5 text-warning" />
-              <span className="text-xs font-medium text-foreground">{task.points}</span>
+              <span className="text-xs font-medium text-foreground">{getLevelFromPoints(task.points)}</span>
             </div>
             <div className="flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">
-                {new Date(task.deadline).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                {formatKanbanDeadline(task.deadline)}
               </span>
             </div>
           </div>
@@ -110,12 +161,12 @@ function TaskCard({ task, isDragging, onReviewClick, onDelete }: { task: Task; i
             {task.assignee.name.split(" ")[0]}
           </Badge>
         </div>
-      </Card>
+      </ParticleCard>
     </div>
   );
 }
 
-function DroppableColumn({ column, tasks, onReviewClick, onDelete }: { column: typeof columns[0]; tasks: Task[]; onReviewClick?: (task: Task) => void; onDelete?: (task: Task) => void }) {
+function DroppableColumn({ column, tasks, onReviewClick, onDelete, onEdit }: { column: typeof columns[0]; tasks: Task[]; onReviewClick?: (task: Task) => void; onDelete?: (task: Task) => void; onEdit?: (task: Task) => void }) {
   const { setNodeRef } = useDroppable({ id: column.id });
 
   return (
@@ -132,7 +183,7 @@ function DroppableColumn({ column, tasks, onReviewClick, onDelete }: { column: t
           <AnimatePresence>
             {tasks.map((task) => (
               <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
-                <TaskCard task={task} onReviewClick={onReviewClick} onDelete={onDelete} />
+                <TaskCard task={task} onReviewClick={onReviewClick} onDelete={onDelete} onEdit={onEdit} />
               </motion.div>
             ))}
           </AnimatePresence>
@@ -144,58 +195,73 @@ function DroppableColumn({ column, tasks, onReviewClick, onDelete }: { column: t
 
 
 export default function Kanban() {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setIsLoading] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [showMascot, setShowMascot] = useState(false);
+  const [pendingDoneToast, setPendingDoneToast] = useState<{ title: string; description: string } | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  const activeUsers = getActiveUsers();
-  const currentUser = getCurrentUser();
+  const currentUser = user ?? getCurrentUser();
 
-  // Filter tasks based on role
-  const filteredTasks = currentUser.role === "funcionario" 
-    ? tasks.filter(task => task.assignee.id === currentUser.id)
+  const filteredTasks = currentUser.role === "funcionario"
+    ? tasks.filter(task => task.assignee.id === String(currentUser.id))
     : tasks;
 
-  const mapApiTaskToTask = (task: any): Task => ({
-    id: task.id?.toString() ?? "",
-    title: task.title,
-    description: task.description,
-    status: task.status,
-    points: task.points,
-    deadline: task.deadline,
-    created_at: task.created_at,
-    assignee: {
-      id: task.assignee_id?.toString() ?? "",
-      name: task.assignee_name ?? "",
-      email: task.assignee_email ?? "",
-      role: task.assignee_role ?? "funcionario",
-      nivel: currentUser?.nivel ?? 1,
-      points: 0,
-      institution_id: "",
-      position: "",
-      gestorId: null,
-      avatar: ""
-    },
-  });
+  const mapApiTaskToTask = (task: any): Task => {
+    let deadlineValue: string = "";
+
+    if (task.deadline instanceof Date) {
+      deadlineValue = task.deadline.toISOString().split("T")[0];
+    } else if (typeof task.deadline === "string") {
+      const normalized = task.deadline.trim();
+      if (normalized.length > 0) {
+        deadlineValue = normalized.split("T")[0];
+      }
+    }
+
+    return {
+      id: task.id?.toString() ?? "",
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      points: task.points,
+      deadline: deadlineValue,
+      created_at: task.created_at,
+      gestorId: task.gestor_id?.toString() ?? null,
+      createdBy: task.created_by?.toString() ?? null,
+      assignee: {
+        id: task.assignee_id?.toString() ?? "",
+        name: task.assignee_name ?? "",
+        email: task.assignee_email ?? "",
+        role: task.assignee_role ?? "funcionario",
+        nivel: (currentUser?.nivel ?? 1) as 1 | 2 | 3,
+        points: 0,
+        institution_id: "",
+        position: "",
+        gestorId: null,
+        avatar: "",
+      },
+    };
+  };
 
   const loadTasks = async () => {
-    setLoading(true);
-    setError(null);
-
+    setIsLoading(true);
     try {
       const response = await fetch(getApiUrl("/api/tasks"), {
         headers: {
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -206,16 +272,16 @@ export default function Kanban() {
       setTasks((data.tasks || []).map(mapApiTaskToTask));
     } catch (err: any) {
       console.error("loadTasks error:", err);
-      setError(err?.message ?? "Erro ao carregar tarefas");
       toast({ title: "Erro", description: err?.message ?? "Falha ao carregar tarefas" });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const handleCreateTask = async (data: { title: string; description: string; assignedTo: string; points: number }) => {
-    if (data.points < 1 || data.points > 1000) {
-      toast({ title: "Erro", description: "Os pontos devem estar entre 1 e 1000." });
+  const handleCreateTask = async (data: { title: string; description: string; assignedTo: string; points: number; deadline?: string }) => {
+    const validPoints = [25, 75, 125];
+    if (!validPoints.includes(data.points)) {
+      toast({ title: "Erro", description: "Pontos inválidos. Deve ser 25, 75 ou 125." });
       return;
     }
 
@@ -230,8 +296,10 @@ export default function Kanban() {
           title: data.title,
           description: data.description,
           points: data.points,
+          deadline: data.deadline || null,
           assignee_id: Number(data.assignedTo),
         }),
+        credentials: 'include',
       });
 
       const responseData = await response.json();
@@ -258,6 +326,7 @@ export default function Kanban() {
           ...getAuthHeaders(),
         },
         body: JSON.stringify(body),
+        credentials: 'include',
       });
 
       const responseData = await response.json();
@@ -269,10 +338,10 @@ export default function Kanban() {
         prev.map((t) => (t.id === taskId ? { ...t, status: responseData.task.status, evidence: responseData.task.evidence } : t)),
       );
 
-      // Mostra toast diferenciado para anexação de tarefa
+      // Adia a mensagem até a conclusão do vídeo quando a tarefa for marcada como concluída.
       if (status === 'done') {
-        toast({
-          title: "Tarefa Enviada",
+        setPendingDoneToast({
+          title: "🎉 Tarefa Enviada",
           description: responseData.message,
         });
       }
@@ -284,7 +353,7 @@ export default function Kanban() {
   };
 
   const handleTaskAction = (task: Task) => {
-    const currentUser = getCurrentUser();
+    const currentUser = user ?? getCurrentUser();
     if (currentUser.nivel === 1 && task.status === "in_progress") {
       // Funcionário marcando como concluída
       setSelectedTask(task);
@@ -299,14 +368,15 @@ export default function Kanban() {
   const handleEvidenceSubmit = async (evidence: string) => {
     if (!selectedTask) return;
 
+    setShowMascot(true);
     setActionLoading(true);
     try {
       await updateTaskStatus(selectedTask.id, "done", evidence);
       setEvidenceModalOpen(false);
       setSelectedTask(null);
-      toast({ title: "Sucesso", description: "Tarefa enviada para revisão!" });
     } catch (error) {
       console.error("Error submitting evidence:", error);
+      setShowMascot(false);
     } finally {
       setActionLoading(false);
     }
@@ -324,6 +394,7 @@ export default function Kanban() {
           ...getAuthHeaders(),
         },
         body: JSON.stringify({ action, feedback }),
+        credentials: 'include',
       });
 
       const responseData = await response.json();
@@ -367,11 +438,46 @@ export default function Kanban() {
     }
   };
 
+  const handleEditTask = async (data: { title: string; description: string; assignedTo: string; points: number; deadline?: string }) => {
+    if (!taskToEdit) return;
+    const validPoints = [25, 75, 125];
+    if (!validPoints.includes(data.points)) {
+      toast({ title: "Erro", description: "Pontos inválidos. Deve ser 25, 75 ou 125." });
+      return;
+    }
+    try {
+      const response = await fetch(getApiUrl(`/api/tasks/${taskToEdit.id}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({
+          title: data.title,
+          description: data.description,
+          points: data.points,
+          deadline: data.deadline || null,
+          assignee_id: Number(data.assignedTo),
+        }),
+        credentials: "include",
+      });
+      const responseData = await response.json();
+      if (!response.ok) throw new Error(responseData.error ?? "Erro ao editar tarefa");
+      await loadTasks();
+      setEditModalOpen(false);
+      setTaskToEdit(null);
+      toast({ title: "Tarefa atualizada", description: "A tarefa foi editada com sucesso." });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err?.message ?? "Falha ao editar tarefa" });
+    }
+  };
+
+  const openEditModal = (task: Task) => {
+    setTaskToEdit(task);
+    setEditModalOpen(true);
+  };
+
   const deletionIntervalsRef = useRef<Record<string, number>>({});
 
   const handleDeleteTask = async (task: Task) => {
     if (!(currentUser.role === "gestor" || currentUser.role === "admin")) return;
-    if (!["approved", "rejected"].includes(task.status)) return;
 
     try {
       const response = await fetch(getApiUrl(`/api/tasks/${task.id}`), {
@@ -456,7 +562,7 @@ export default function Kanban() {
       const allowedDrag = ['todo', 'in_progress', 'done'];
 
       if (!allowedDrag.includes(targetStatus)) {
-        const currentUser = getCurrentUser();
+        const currentUser = user ?? getCurrentUser();
         const description = currentUser.role === 'funcionario'
           ? 'Aprovação/reprovação só pode ser feita pelo superior'
           : 'Aprovação/reprovação deve ser feita via botão de revisão';
@@ -532,6 +638,7 @@ export default function Kanban() {
               tasks={filteredTasks.filter((t) => t.status === col.id)}
               onReviewClick={handleTaskAction}
               onDelete={handleDeleteTask}
+              onEdit={openEditModal}
             />
           ))}
         </div>
@@ -554,51 +661,67 @@ export default function Kanban() {
       <ReviewModal
         open={reviewModalOpen}
         onOpenChange={setReviewModalOpen}
-        task={selectedTask}
+        task={selectedTask ? {
+          ...selectedTask,
+          assignee_name: selectedTask.assignee.name,
+          assignee_email: selectedTask.assignee.email,
+        } : null}
         onReview={handleReview}
         loading={actionLoading}
+      />
+
+      <TaskFormModal
+        open={editModalOpen}
+        onOpenChange={(open) => { if (!open) { setEditModalOpen(false); setTaskToEdit(null); } else { setEditModalOpen(true); } }}
+        onSubmit={handleEditTask}
+        isEditMode={true}
+        initialValues={taskToEdit ? {
+          title: taskToEdit.title,
+          description: taskToEdit.description,
+          level: taskToEdit.points === 25 ? "Básico" : taskToEdit.points === 75 ? "Médio" : taskToEdit.points === 125 ? "Avançado" : "Básico",
+          deadline: taskToEdit.deadline || "",
+          assignedTo: taskToEdit.assignee.id.toString(),
+        } : undefined}
       />
 
       {showMascot && (
         <>
           <style>{`
             @keyframes mascotFadeIn {
-              from { opacity: 0; transform: scale(0.8); }
-              to { opacity: 1; transform: scale(1); }
-            }
-            @keyframes mascotFadeOut {
-              from { opacity: 1; transform: scale(1); }
-              to { opacity: 0; transform: scale(0.8); }
+              from { opacity: 0; transform: translateY(20px) scale(0.95); }
+              to { opacity: 1; transform: translateY(0) scale(1); }
             }
           `}</style>
           <div
             style={{
               position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none',
+              right: '1rem',
+              bottom: '1rem',
+              width: '380px',
+              maxWidth: 'calc(100vw - 2rem)',
+              borderRadius: '1rem',
+              overflow: 'hidden',
               zIndex: 9999,
               animation: 'mascotFadeIn 0.3s ease-out',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              background: 'rgba(0, 0, 0, 0.45)'
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.2)',
             }}
           >
-            <video
+            <img
               src={mascotVideo}
-              autoPlay
-              muted
-              onEnded={() => setTimeout(() => setShowMascot(false), 500)}
+              alt="Mascote"
+              onLoad={() => {
+                setTimeout(() => {
+                  setShowMascot(false);
+                  if (pendingDoneToast) {
+                    toast(pendingDoneToast);
+                    setPendingDoneToast(null);
+                  }
+                }, 8000);
+              }}
               style={{
-                width: '350px',
-                maxWidth: '60vw',
-                borderRadius: '1rem',
-                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)'
+                width: '100%',
+                height: 'auto',
+                display: 'block',
               }}
             />
           </div>
